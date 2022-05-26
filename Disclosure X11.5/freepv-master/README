@@ -1,0 +1,75 @@
+Typical cmake build instructions:
+
+  cmake .
+  make
+  make install
+
+Bug reports and patches can be added to the freepv tracker or sent to the
+freepv-devel mailing list:
+
+http://sourceforge.net/tracker/?atid=772024&group_id=148373&func=browse
+http://sourceforge.net/mailarchive/forum.php?forum_name=freepv-devel
+
+Required packages for compilation (ubuntu dapper):
+
+cmake
+make
+pkg-config
+g++
+mozilla-dev
+glutg3-dev
+zlib1g-dev
+libjpeg-dev
+libxext-dev
+libxmu-dev
+x11proto-xf86vidmode-dev
+libxxf86vm-dev
+
+ubuntu hardy heron:
+
+cmake
+make
+pkg-config
+g++
+mozilla-dev
+freeglut-dev
+zlib1g-dev
+libjpeg-dev
+libxext-dev
+libxmu-dev
+x11proto-xf86vidmode-dev
+libxxf86vm-dev
+libnspr4-dev
+libxml2-dev
+libpng12-dev                              
+
+fedora f8:
+
+firefox-devel
+libjpeg-devel
+zlib-devel
+cmake
+pkgconfig
+gcc-c++
+libXxf86vm-devel
+freeglut-devel
+libXt-devel
+libXmu-devel
+libxml2-devel
+libpng-devel
+
+fedora f9:
+
+xulrunner-devel
+libjpeg-devel
+zlib-devel
+cmake
+pkgconfig
+gcc-c++
+libXxf86vm-devel
+freeglut-devel
+libXt-devel
+libXmu-devel
+libxml2-devel
+libpng-devel
+

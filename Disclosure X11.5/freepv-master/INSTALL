@@ -1,0 +1,55 @@
+Using the CMake build system under Unix
+=======================================
+
+briefly, do the following:
+
+cmake -DCMAKE_INSTALL_PREFIX=/usr/local .
+make
+make install
+
+alternatively, you can also do an out of source build, if
+you don't want to clutter the source tree with object files etc.
+
+$ cd freepv
+$ mkdir mybuild
+$ cd mybuild
+$ cmake -DCMAKE_INSTALL_PREFIX=/usr/local ../
+$ make
+$ make install
+
+Please report any problems to the Freepv-devel mailing list:
+https://lists.sourceforge.net/lists/listinfo/freepv-devel
+
+
+Missing dependencies
+=======================
+If cmake failed to pick up some dependencies, make sure you have
+installed the corresponding development packages (often named:
+libjpeg-dev and so on). If cmake still fails to find the libraries,
+for example if you have installed them into a non-standard directory,
+you can specify the path to libraries and include files using the
+ccmake program:
+$ cmake .
+[some failure]
+$ ccmake .
+
+Configuring the build
+=====================
+
+Upon cmake invocation, several variables can be set with the -D command line
+parameter. Important variables include:
+
+CMAKE_INSTALL_PREFIX  Destination directory of make install 
+                      (default: /usr/local)
+LIB_SUFFIX            Specifies suffix used for library paths. For AMD64,
+                      usually 64 is used as prefix. Default: empty.
+                      Setting to 64 results in: $CMAKE_INSTALL_PREFIX/lib64
+
+For distributors:
+=================
+CMake supports the DESTDIR variable during make install, this
+might be helpful to install into a temporary directory during
+package creation
+
+$ make install DESTDIR=mytmp_package_dir
+

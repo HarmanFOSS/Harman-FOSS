@@ -1,0 +1,209 @@
+GStreamer 1.18 Release Notes
+
+These release notes are a placeholder, please bear with us while we
+finish writing up the real thing.
+
+GStreamer 1.18.0 has not yet been released. It is scheduled for release
+in late August / early September 2020.
+
+1.17.x is the unstable development series that is currently being
+developed in the git master branch and which will eventually result in
+1.18, and 1.17.90 is the current 1.18 pre-release in that series.
+
+1.18 will be backwards-compatible to the stable 1.16, 1.14, 1.12, 1.10,
+1.8, 1.6, 1.4, 1.2 and 1.0 release series.
+
+See https://gstreamer.freedesktop.org/releases/1.18/ for the latest
+version of this document.
+
+Last updated: Wednesday 20 August 2020, 11:00 UTC (log)
+
+Introduction
+
+The GStreamer team is proud to announce a new major feature release in
+the stable 1.x API series of your favourite cross-platform multimedia
+framework!
+
+As always, this release is again packed with many new features, bug
+fixes and other improvements.
+
+Highlights
+
+-   FIXME
+
+Major new features and changes
+
+Noteworthy new API
+
+-   FIXME
+
+New Elements
+
+-   FIXME
+
+New element features and additions
+
+-   FIXME
+
+Plugin and library moves
+
+-   FIXME
+
+Plugin removals
+
+The following plugins have been removed from gst-plugins-bad:
+
+-   FIXME
+
+Miscellaneous API additions
+
+-   FIXME
+
+Miscellaneous performance and memory optimisations
+
+As always there have been many performance and memory usage improvements
+across all components and modules. Some of them have already been
+mentioned elsewhere so won’t be repeated here.
+
+The following list is only a small snapshot of some of the more
+interesting optimisations that haven’t been mentioned in other contexts
+yet:
+
+-   FIXME
+
+GstPlayer
+
+-   FIXME
+
+Miscellaneous changes
+
+-   FIXME
+
+OpenGL integration
+
+-   FIXME
+
+Tracing framework and debugging improvements
+
+-   FIXME
+
+Tools
+
+-   FIXME
+
+GStreamer RTSP server
+
+-   FIXME
+
+GStreamer VAAPI
+
+-   FIXME
+
+GStreamer OMX
+
+-   FIXME
+
+GStreamer Editing Services and NLE
+
+-   FIXME
+
+GStreamer validate
+
+-   FIXME
+
+GStreamer Python Bindings
+
+-   FIXME
+
+GStreamer C# Bindings
+
+-   FIXME
+
+GStreamer Rust Bindings
+
+-   FIXME
+
+GStreamer Rust Plugins
+
+-   FIXME
+
+Build and Dependencies
+
+-   The Autotools build system has finally been removed in favour of the
+    Meson build system. Developers who currently use gst-uninstalled
+    should move to gst-build.
+
+-   API and plugin documentation are no longer built with gtk_doc. The
+    gtk_doc documentation has been removed in favour of a new unified
+    documentation module built with hotdoc. The intention is to
+    distribute the generated documentation in form of tarballs alongside
+    releases.
+
+-   FIXME
+
+Cerbero
+
+Cerbero is a meta build system used to build GStreamer plus dependencies
+on platforms where dependencies are not readily available, such as
+Windows, Android, iOS and macOS.
+
+Cerbero has seen a number of improvements:
+
+-   FIXME
+
+Platform-specific changes and improvements
+
+Android
+
+-   FIXME
+
+macOS and iOS
+
+-   FIXME
+
+Windows
+
+-   toolchain upgrade
+
+-   FIXME
+
+Contributors
+
+-   FIXME
+
+… and many others who have contributed bug reports, translations, sent
+suggestions or helped testing.
+
+Stable 1.18 branch
+
+After the 1.18.0 release there will be several 1.18.x bug-fix releases
+which will contain bug fixes which have been deemed suitable for a
+stable branch, but no new features or intrusive changes will be added to
+a bug-fix release usually. The 1.18.x bug-fix releases will be made from
+the git 1.18 branch, which will be a stable branch.
+
+1.18.0
+
+1.18.0 has not been released yet.
+
+Known Issues
+
+-   FIXME
+
+Schedule for 1.20
+
+Our next major feature release will be 1.20, and 1.19 will be the
+unstable development version leading up to the stable 1.20 release. The
+development of 1.19/1.20 will happen in the git master branch.
+
+The plan for the 1.20 development cycle is yet to be confirmed.
+
+1.20 will be backwards-compatible to the stable 1.18, 1.16, 1.14, 1.12,
+1.10, 1.8, 1.6, 1.4, 1.2 and 1.0 release series.
+
+------------------------------------------------------------------------
+
+These release notes have been prepared by Tim-Philipp Müller with
+contributions from … (FIXME)
+
+License: CC BY-SA 4.0

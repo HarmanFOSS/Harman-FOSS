@@ -1,0 +1,1052 @@
+2009-03-08 22:41  brunopostle
+
+	* CMakeScripts/FindFREEGLUT.cmake: Use glut if freeglut not
+	  available (Philippe Didier)
+
+2009-02-22 22:50  brunopostle
+
+	* CMakeLists.txt: Bump version to 0.3.0 for beta release.
+
+2009-02-22 22:30  brunopostle
+
+	* CMakeLists.txt, CMakeScripts/FindFREEGLUT.cmake,
+	  CMakeScripts/FindGECKO.cmake, CMakeScripts/FindJPEG.cmake,
+	  CMakeScripts/FindXF86VM.cmake, CMakeScripts/FindZLIB.cmake,
+	  src/CMakeLists.txt, src/config.h.in.cmake,
+	  src/freepv-mozilla/CMakeLists.txt, src/freepv-mozilla/plugin.cpp,
+	  src/freepv-mozilla/plugin.h, src/freepv-mozilla/plugin_unix.cpp,
+	  src/freepv-mozilla/plugin_windows.cpp,
+	  src/freepv-mozilla/resource.h, src/libfreepv/CMakeLists.txt,
+	  src/libfreepv/Parameters.cpp, src/libfreepv/Parameters.h,
+	  testcases/good/test.html, testcases/good/test_cube.html: Unify
+	  mixed line-endings in text files
+
+2009-02-22 11:05  brunopostle
+
+	* ChangeLog: update ChangeLog
+
+2009-02-22 10:59  brunopostle
+
+	* src/libfreepv/QTVRDecoder.cpp: Don't read past EOF patch #2225655
+	  (Tom Sharpless)
+	  (merged from branch_leonox)
+
+2009-02-22 10:56  brunopostle
+
+	* CMakeLists.txt, src/config.h.in.cmake,
+	  src/freepv-glut/freepv-glut.cpp,
+	  src/freepv-glut/glut_platform.cpp,
+	  src/freepv-glx/glx_platform.cpp, src/freepv-glx/glx_platform.h:
+	  re-apply svn116 & svn117 (Pablo d'Angelo):
+	  fixed include problems with GL/glut.h, do not require header
+	  files
+	  for video mode switching, currently unused anyway.
+	  abort compilation if no glut has been found
+
+2008-10-15 14:18  leonox
+
+	* AUTHORS, CMakeLists.txt, CMakeScripts/FindGECKO.cmake,
+	  CMakeScripts/FindXF86VM.cmake, INSTALL, Makefile.am,
+	  Makefile.cvs, README, config.guess, config.sub, configure.in,
+	  depcomp, freepv.kdevelop, install-sh, libtool, ltmain.sh,
+	  missing, mkinstalldirs, src/CMakeLists.txt, src/Makefile.am,
+	  src/config.h.in.cmake, src/freepv-glut/CMakeLists.txt,
+	  src/freepv-glut/Makefile.am, src/freepv-glut/freepv-glut.cpp,
+	  src/freepv-glut/freepv-glut.desktop,
+	  src/freepv-glut/glut_platform.cpp, src/freepv-glx/CMakeLists.txt,
+	  src/freepv-glx/Makefile.am, src/freepv-glx/glx_platform.cpp,
+	  src/freepv-glx/glx_platform.h, src/freepv-glx/main.cpp,
+	  src/freepv-mozilla/CMakeLists.txt,
+	  src/freepv-mozilla/Makefile.am, src/freepv-mozilla/plugin.cpp,
+	  src/freepv-mozilla/plugin_unix.cpp,
+	  src/freepv-mozilla/plugin_windows.cpp, src/freepv.sln,
+	  src/libfreepv/Action.cpp, src/libfreepv/Action.h,
+	  src/libfreepv/Behavior.cpp, src/libfreepv/Behavior.h,
+	  src/libfreepv/CMakeLists.txt, src/libfreepv/Camera.cpp,
+	  src/libfreepv/Camera.h, src/libfreepv/Controller.h,
+	  src/libfreepv/Error.cpp, src/libfreepv/Error.h,
+	  src/libfreepv/EventProcessor.cpp, src/libfreepv/EventProcessor.h,
+	  src/libfreepv/Events.h, src/libfreepv/Image.cpp,
+	  src/libfreepv/Image.h, src/libfreepv/Makefile.am,
+	  src/libfreepv/Math, src/libfreepv/Math/Matrix4.cpp,
+	  src/libfreepv/Math/Matrix4.h, src/libfreepv/Math/quaternion.cpp,
+	  src/libfreepv/Math/quaternion.h, src/libfreepv/NodeElement.cpp,
+	  src/libfreepv/NodeElement.h, src/libfreepv/OpenGLRenderer.cpp,
+	  src/libfreepv/OpenGLRenderer.h, src/libfreepv/PanoViewer.cpp,
+	  src/libfreepv/PanoViewer.h, src/libfreepv/Parameters.cpp,
+	  src/libfreepv/Parameters.h, src/libfreepv/QTVRDecoder.cpp,
+	  src/libfreepv/Renderer.h, src/libfreepv/SPiVparser.cpp,
+	  src/libfreepv/SPiVparser.h, src/libfreepv/Scene.cpp,
+	  src/libfreepv/Scene.h, src/libfreepv/SceneElement.cpp,
+	  src/libfreepv/SceneElement.h, src/libfreepv/Subject.cpp,
+	  src/libfreepv/Subject.h, src/libfreepv/Utils,
+	  src/libfreepv/Utils/getPath.h,
+	  src/libfreepv/Utils/signatures.cpp,
+	  src/libfreepv/Utils/signatures.h,
+	  src/libfreepv/Utils/stringID.cpp, src/libfreepv/Utils/stringID.h,
+	  src/libfreepv/XMLparser.cpp, src/libfreepv/XMLparser.h,
+	  src/libfreepv/imageReader.cpp, src/libfreepv/imageReader.h,
+	  src/libfreepv/pngReader.cpp, src/libfreepv/pngReader.h,
+	  src/utils/CMakeLists.txt, src/utils/Makefile.am, testcases/bad,
+	  testcases/bad/34632x342-pixels.mov, testcases/bad/ftyp-atom.mov,
+	  testcases/good/spiv, testcases/good/spiv/GNU.png,
+	  testcases/good/spiv/cubeYuval.htm,
+	  testcases/good/spiv/cubeYuval.jpg,
+	  testcases/good/spiv/global.xml, testcases/good/spiv/license.txt,
+	  testcases/good/spiv/mini.xml,
+	  testcases/good/spiv/sphereYuval.jpg,
+	  testcases/good/spiv/tuxi.png: Merged branch_leonox into the
+	  trunk.
+
+2007-07-06 06:20  dangelo
+
+	* src/freepv-glut/freepv-glut.cpp: abort compilation if no glut has
+	  been found
+
+2007-07-06 06:11  dangelo
+
+	* CMakeLists.txt, src/config.h.in.cmake,
+	  src/freepv-glut/glut_platform.cpp,
+	  src/freepv-glx/glx_platform.cpp, src/freepv-glx/glx_platform.h:
+	  fixed include problems with GL/glut.h, do not require header
+	  files
+	  for video mode switching, currently unused anyway.
+
+2007-06-29 06:17  Leonox
+
+	* src/libfreepv/Parameters.cpp: Parameter.cpp... this file was in
+	  the branch...
+
+2007-05-25 00:05  leonox
+
+	* CMakeLists.txt, CMakeScripts/FindGECKO.cmake, src/CMakeLists.txt,
+	  src/config.h.in.cmake, src/freepv-glut/freepv-glut.cpp,
+	  src/freepv-glx/CMakeLists.txt, src/freepv-glx/main.cpp,
+	  src/freepv-mozilla/CMakeLists.txt, src/freepv-mozilla/npplat.h,
+	  src/freepv-mozilla/plugin_unix.cpp, src/libfreepv/Parameters.cpp:
+	  CMakeLists.txt for freepv-mozilla and freepv-glx, both work just
+	  under Unix.
+	  Parameters.cpp modified.
+	  freepv-glut.cpp modified.
+	  glx main.cpp modified.
+
+2007-05-18 21:35  dangelo
+
+	* CMakeLists.txt, TODO, freepv.kdevelop, src/config.h.in.cmake:
+	  resolved conflict with my local cmake defines
+
+2007-05-18 05:04  Leonox
+
+	* CMakeLists.txt, CMakeScripts, CMakeScripts/FindFREEGLUT.cmake,
+	  CMakeScripts/FindJPEG.cmake, CMakeScripts/FindZLIB.cmake,
+	  src/config.h.in.cmake, src/freepv-glut/CMakeLists.txt: Added some
+	  cmake scripts to look for libraries, to use them or not there is
+	  and option; under windows the scripts look for the libraries in
+	  the environment variables lib, include, cmake_library_path and
+	  cmake_include_path.
+	  Also fixed problem in setting a variable for sys/time.h inside of
+	  config.h.
+
+2007-04-26 13:14  dangelo
+
+	* ., CMakeLists.txt, src/CMakeLists.txt, src/config.h.in.cmake,
+	  src/freepv-glut/CMakeLists.txt, src/libfreepv/CMakeLists.txt:
+	  added initial CMake (v 2.4) based build system. Tested with MSVC
+	  2003
+
+2006-12-07 14:23  dangelo
+
+	* src/libfreepv/PanoViewer.cpp: bugfix: standalone viewer could not
+	  open any files. (used == instead of = :-(
+
+2006-12-01 23:42  dangelo
+
+	* ChangeLog, src/freepv-glx/glx_platform.cpp,
+	  src/freepv-mozilla/plugin_unix.cpp, src/libfreepv/Controller.h,
+	  src/libfreepv/Image.cpp, src/libfreepv/JpegReader.cpp,
+	  src/libfreepv/OpenGLRenderer.cpp, src/libfreepv/PanoViewer.cpp,
+	  src/libfreepv/PanoViewer.h, src/libfreepv/Platform.h,
+	  src/libfreepv/QTVRDecoder.cpp, src/libfreepv/Renderer.h: minor
+	  code cleanup, remove some commented code, fixed most warnings
+
+2006-12-01 22:45  dangelo
+
+	* README, src/libfreepv/PanoViewer.cpp, src/libfreepv/PanoViewer.h:
+	  use mime types to detect QTVR vs JPEG, and only fall back to
+	  extension if an
+	  unknown mime type is encountered
+
+2006-11-30 23:06  dangelo
+
+	* src/freepv-mozilla/plugin_unix.cpp: modified unix plugin name to
+	  include QuickTime. Some webpages, like
+	  http://homepage.mac.com/wkaemena/FSPanos/Menu352.html check the
+	  plugin name
+	  during quicktime detection
+
+2006-10-27 18:06  dangelo
+
+	* src/freepv-mozilla/plugin_windows.cpp,
+	  src/libfreepv/PanoViewer.cpp, src/libfreepv/Platform.h:
+	  Platform::SetTimer() is now a one shot timer. Modified windows
+	  plugin to use Fulvios immediate PostMessage() idea.
+
+2006-10-27 18:04  dangelo
+
+	* src/freepv-mozilla/freepv.rc: added pangeaVR mime types to
+	  windows plugin
+
+2006-10-27 18:04  dangelo
+
+	* configure.in: added -Wall to debug build
+
+2006-10-24 07:46  dangelo
+
+	* src/libfreepv/OpenGLRenderer.cpp: bugfix: display all faces of a
+	  cubic panorama when loading single cube faces.
+
+2006-10-21 21:12  dangelo
+
+	* src/freepv-mozilla/plugin_unix.cpp: added application/quicktime
+	  mime type
+
+2006-10-18 12:41  dangelo
+
+	* src/freepv-mozilla/plugin_windows.cpp, testcases/good/test.html:
+	  windows mozilla plugin: repaint immediately after receiving mouse
+	  events
+
+2006-10-16 20:59  dangelo
+
+	* src/freepv-glut/freepv-glut.vcproj,
+	  src/freepv-glut/glut_platform.cpp,
+	  src/freepv-mozilla/FreePV.vcproj, src/libfreepv/QTVRDecoder.cpp,
+	  src/libfreepv/libfreepv.vcproj, src/msvc, src/msvc/config.h:
+	  added special config.h file for MSVC build
+
+2006-10-16 20:32  dangelo
+
+	* configure.in, src/freepv-glut/Makefile.am,
+	  src/freepv-glut/freepv-glut.cpp,
+	  src/freepv-glut/glut_platform.cpp,
+	  src/freepv-glut/glut_platform.h, src/freepv-mozilla/Makefile.am,
+	  src/libfreepv/Controller.h, src/libfreepv/OpenGLRenderer.cpp:
+	  zoom in/out with up/down keys (glut cannot detect single shift
+	  and ctrl keys..)
+
+2006-10-16 19:21  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp: added
+	  modifications for glut on OSX
+
+2006-10-16 17:44  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/glutfont/Makefile.am,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_copy.h,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_data.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_glutfont_definitions.c:
+	  trying to add OSX support
+
+2006-10-15 18:14  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/m4/ax_opengl.m4: try to
+	  detect the different glut version
+
+2006-10-15 16:29  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-mozilla/Makefile.am: try to detect
+	  platform in configure script
+
+2006-10-14 20:24  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp: commented printf
+	  dump of the QTVR file structure
+
+2006-10-14 20:08  dangelo
+
+	* freepv/trunk/src/Makefile.am, freepv/trunk/src/utils,
+	  freepv/trunk/src/utils/Makefile.am,
+	  freepv/trunk/src/utils/qtvr2img.cpp: added qtvr2img utility,
+	  useful to extract images from a QTVR file
+
+2006-10-14 19:34  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h: added support for
+	  equirectangular panoramas
+
+2006-10-14 14:10  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: fixed tiled
+	  cylindricals with multiple rows
+
+2006-10-14 13:42  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: tile cylindrical
+	  pano, enables viewing of high res panos.
+
+2006-10-13 06:12  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/src/Makefile.am: do not
+	  build mozilla plugin and glx based viewer, if glx hasn't been
+	  found.
+	  This should hopefully enable building freepv-glut on OSX using
+	  the
+	  autoconf build system
+
+2006-10-12 18:57  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: removed debug
+	  tile writer
+
+2006-10-12 18:45  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/libfreepv/Image.cpp,
+	  freepv/trunk/src/libfreepv/Image.h,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.h,
+	  freepv/trunk/src/libfreepv/utils.h: support for tiled cube
+	  textures, added vram= parameter
+	  to specify the amount of vram that should be used for textures.
+
+2006-10-10 05:27  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_unix.cpp: unix
+	  mozilla-plugin: really stop updating if scene is static..
+
+2006-10-10 05:17  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/freepv.def: added missing def
+	  file
+
+2006-10-09 20:55  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h: windows
+	  mozilla plugin: stop updating if no movement in scene
+
+2006-10-09 20:54  dangelo
+
+	* freepv/trunk/m4/ax_opengl.m4: check for freeglut.h
+
+2006-10-09 16:59  dangelo
+
+	* freepv/trunk/src/libfreepv/PanoViewer.cpp: redraw after loading
+	  qtvr file
+
+2006-10-09 16:48  dangelo
+
+	* freepv/trunk/freepv.kdevelop, freepv/trunk/src/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h: implemented
+	  startTimer(), stopTimer() for unix platform
+
+2006-10-09 15:07  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/freepv-glut.vcproj,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.h,
+	  freepv/trunk/src/freepv-mozilla/FreePV.vcproj,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h: stop continous redraw if the
+	  scene is static. (glut only, so far)
+
+2006-10-08 20:47  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_windows.cpp: added a
+	  Sleep() to the main drawing loop to avoid slowing down the
+	  system endlessly. But now its too jerky...
+
+2006-10-08 20:39  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/freepv-glut.vcproj,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-glut/main.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h,
+	  freepv/trunk/src/freepv.sln,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h,
+	  freepv/trunk/src/libfreepv/libfreepv.vcproj: fixed some warnings
+	  during msvc compilation. updated project files to include zlib.
+	  tried to make windows mozilla plugin better behaved, but its
+	  still not as smooth as the unix version.
+
+2006-10-08 18:45  dangelo
+
+	* freepv/trunk/ChangeLog, freepv/trunk/configure.in,
+	  freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-glx/glx_platform.cpp,
+	  freepv/trunk/src/freepv-glx/main.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/Image.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.h,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h, freepv/trunk/src/msvc:
+	  switched updates back to absolute timing. Use proper exponential
+	  delay for "inertia" simulation, the inertia is now independent
+	  of the framerate.
+
+2006-10-08 18:43  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_unix.cpp: added pangea
+	  and glpanoview mime types
+
+2006-10-08 18:42  dangelo
+
+	* freepv/trunk/Makefile.am, freepv/trunk/m4/Makefile.am,
+	  freepv/trunk/src/freepv-glut/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/libfreepv/Makefile.am: include data files in
+	  makefile.am, make dist works now
+
+2006-10-08 18:39  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: use smaller font,
+	  with the old one, not all error messages fitted into
+	  most small web page panos
+
+2006-10-08 10:54  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/m4/zlib.m4,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.h: added support for
+	  compressed headers in mov files
+
+2006-10-07 23:52  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-glx/glx_platform.cpp,
+	  freepv/trunk/src/freepv-mozilla/FreePV.vcproj,
+	  freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h: platform
+	  reports time differences with double precision
+
+2006-10-07 23:51  dangelo
+
+	* freepv/trunk/src/libfreepv/PanoViewer.cpp: fixed crash when
+	  cylindrical QTVR with a different image format than JPEG
+	  are used
+
+2006-10-07 23:35  dangelo
+
+	* freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/Image.h,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/JpegReader.h,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.h,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.h,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h,
+	  freepv/trunk/src/libfreepv/utils.cpp,
+	  freepv/trunk/src/libfreepv/utils.h: added support for
+	  cylindrical panoramas. They are currently stored
+	  in a single texture, so their resolution isn't too high.
+
+2006-10-06 22:50  dangelo
+
+	* freepv/trunk/src/libfreepv/QTVRDecoder.cpp: improved QTVR
+	  decoder to deal with multiple samples in one chunk
+
+2006-10-06 21:04  dangelo
+
+	* freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/Scene.cpp: limit pitch to -90..90
+
+2006-10-06 20:54  dangelo
+
+	* freepv/trunk/src/libfreepv/QTVRDecoder.cpp: recognize full
+	  resolution pano tracks and cylindrical panoramas
+
+2006-10-06 14:43  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/freepv-glut.vcproj: parameters
+	  specified in ~/.freepv override the command line parameters.
+	  Useful for setting the
+	  quality for all panos.
+
+2006-10-06 14:40  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.h,
+	  freepv/trunk/src/libfreepv/Renderer.h,
+	  freepv/trunk/src/libfreepv/libfreepv.vcproj: added 3 render
+	  quality settings, low, medium, high. They can be selected with
+	  the quality= parameter.
+
+2006-10-05 15:32  dangelo
+
+	* freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.h: detect compressed mov
+	  files, and print appropriate error message.
+
+2006-10-04 21:49  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: accidently
+	  commited debug code that saved the opengl textures to disk..
+
+2006-10-04 20:31  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/libfreepv/Image.cpp,
+	  freepv/trunk/src/libfreepv/Image.h,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/Scene.cpp: use partial textures,
+	  fixed endless loop when loading some qtvr files
+
+2006-10-04 20:31  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: use partial
+	  textures instead of rescaling textures that do not have 2^n width
+
+2006-10-04 12:57  dangelo
+
+	* freepv/trunk/src/libfreepv/Image.cpp,
+	  freepv/trunk/src/libfreepv/Image.h: added function to get
+	  subImages, useful for further tiled texture generation.
+
+2006-10-04 12:56  dangelo
+
+	* freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/utils.cpp,
+	  freepv/trunk/src/libfreepv/utils.h: strip leading and trailing
+	  spaces from input file/url
+
+2006-10-03 20:29  dangelo
+
+	* freepv/trunk/AUTHORS: updated authors file
+
+2006-10-03 20:25  dangelo
+
+	* freepv/trunk/src/libfreepv/QTVRDecoder.cpp: allow compilation of
+	  qtvr decoder with gcc
+
+2006-10-03 20:22  dangelo
+
+	* freepv/trunk/testcases/good/MichelThoby_tiled_qtvr.mov,
+	  freepv/trunk/testcases/good/test_qt_embed.html,
+	  freepv/trunk/testcases/good/writecontrol.js: added typical html
+	  code used in real world webpages
+	  added new tiled test QTVR by MichelThoby
+
+2006-10-03 20:09  dangelo
+
+	* freepv/trunk/src/freepv-glut/Makefile.am,
+	  freepv/trunk/src/freepv-glx/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/libfreepv/Makefile.am: remove references to
+	  libquicktime
+
+2006-10-03 20:08  dangelo
+
+	* freepv/trunk/configure.in,
+	  freepv/trunk/src/freepv-mozilla/FreePV.vcproj,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/JpegReader.h,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp: added qtvr parser
+	  from pangeaVR
+
+2006-10-03 20:07  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_unix.cpp: added mime
+	  types for .mov files. the unix mozilla plugin will now also be
+	  used for QTVR files
+
+2006-09-30 21:57  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h: print svn revision and time
+	  difference between each redraw
+
+2006-09-30 00:15  dangelo
+
+	* freepv/trunk/config.guess, freepv/trunk/config.sub,
+	  freepv/trunk/ltmain.sh: fixed autoconf system, shared libraries
+	  are created with .so extension
+
+2006-09-29 23:55  dangelo
+
+	* freepv/trunk/src/freepv-glut/glut_platform.h,
+	  freepv/trunk/src/freepv-glx/glx_platform.h,
+	  freepv/trunk/src/freepv-mozilla/plugin.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin.h,
+	  freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Platform.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h: better stream handling
+	  for mozilla plugin
+
+2006-09-29 22:38  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h: mozilla-unix
+	  plugin: fixed crash when closing page with panorama.
+
+2006-09-29 21:33  dangelo
+
+	* freepv/trunk/src/freepv-glut/glut_platform.h: fixed compilation
+	  on gcc 4.1 (Bruno Postle)
+
+2006-09-29 21:30  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-glut/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/plugin.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_copy.h,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_data.c: added
+	  fpv prefix to font code copied from freeglut
+
+2006-09-29 13:03  dangelo
+
+	* freepv/trunk/src/libfreepv/PanoViewer.cpp: changed status
+	  messages
+
+2006-09-29 13:02  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/FreePV.vcproj: windows
+	  compilation: modified to compile with gecko-sdk 1.4 - 1.6 (not
+	  only 1.7)
+
+2006-09-29 13:01  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_windows.cpp: the windows
+	  timer seems to be very unreliable and non periodic. Maybe a
+	  special render thread is needed?
+
+2006-09-29 12:59  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h: use mipmapping.
+
+2006-09-29 12:58  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.cpp: glut: delay viewer
+	  start until window has been created.
+
+2006-09-29 07:08  dangelo
+
+	* freepv/trunk/testcases/good/test.html,
+	  freepv/trunk/testcases/good/test_cube.html:
+
+2006-09-29 07:08  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h: fix unix
+	  compilation
+
+2006-09-29 06:46  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h,
+	  freepv/trunk/src/libfreepv/glutfont/Makefile.am: unix mozilla
+	  plugin: compilation fixes and minor cleanup
+
+2006-09-29 06:26  dangelo
+
+	* freepv/trunk/testcases, freepv/trunk/testcases/good,
+	  freepv/trunk/testcases/good/OutsideSionHillCampus.mov,
+	  freepv/trunk/testcases/good/outside_000000.jpg,
+	  freepv/trunk/testcases/good/outside_000001.jpg,
+	  freepv/trunk/testcases/good/outside_000002.jpg,
+	  freepv/trunk/testcases/good/outside_000003.jpg,
+	  freepv/trunk/testcases/good/outside_000004.jpg,
+	  freepv/trunk/testcases/good/outside_000005.jpg,
+	  freepv/trunk/testcases/good/test.html,
+	  freepv/trunk/testcases/good/test_cube.html: added some test files
+
+2006-09-28 22:25  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/FreePV.vcproj,
+	  freepv/trunk/src/freepv-mozilla/plugin.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/libfreepv.vcproj,
+	  freepv/trunk/src/libfreepv/utils.h: half working windows mozilla
+	  plugin.
+
+2006-09-28 22:24  dangelo
+
+	* freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/Platform.h: removed
+	  MouseEvent.released, its just ! MouseEvent.down
+
+2006-09-28 22:22  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/src/Makefile.am: removed
+	  gtk directory from automake build, it is not required, since the
+	  mozilla-plugin uses glx now.
+
+2006-09-28 15:44  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h: more work on
+	  the event handlers
+
+2006-09-28 11:41  dangelo
+
+	* freepv/trunk/AUTHORS:
+
+2006-09-28 11:40  dangelo
+
+	* freepv/trunk/src/freepv-glut/freepv-glut.vcproj,
+	  freepv/trunk/src/freepv-mozilla/FreePV.vcproj,
+	  freepv/trunk/src/freepv-mozilla/freepv.rc,
+	  freepv/trunk/src/freepv-mozilla/plugin.h,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.h,
+	  freepv/trunk/src/freepv.sln,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.h: added
+	  windows mozilla plugin, not complete yet, conversion of timer,
+	  mouse and key events missing.
+
+2006-09-28 11:38  dangelo
+
+	* freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_copy.h,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_data.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_glutfont_definitions.c,
+	  freepv/trunk/src/libfreepv/libfreepv.vcproj: renamed font
+	  renderer include copied from freeglut
+
+2006-09-27 16:18  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/m4/ax_opengl.m4: modified unix build scripts
+
+2006-09-27 16:16  dangelo
+
+	* freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h: working unix
+	  mozilla plugin, based on Xt and glx.
+	  currently the application/freepv mime type is
+	  used.
+
+2006-09-26 20:14  dangelo
+
+	* freepv/trunk/src/Makefile.am,
+	  freepv/trunk/src/freepv-glut/Makefile.am,
+	  freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.h,
+	  freepv/trunk/src/freepv-glx/Makefile.am,
+	  freepv/trunk/src/freepv-glx/glx_platform.cpp,
+	  freepv/trunk/src/freepv-glx/glx_platform.h,
+	  freepv/trunk/src/freepv-glx/main.cpp: made freepv-glut compile
+	  and run under unix
+
+2006-09-26 20:13  dangelo
+
+	* freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/Renderer.h,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/glutfont/Makefile.am,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.h,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_glutfont_definitions.c,
+	  freepv/trunk/src/libfreepv/utils.cpp,
+	  freepv/trunk/src/libfreepv/utils.h: divide init() into init()
+	  and start(). init() does not require a valid opengl context, and
+	  will not start
+	  downloading and viewing the pano, while start() will do just
+	  that.
+
+2006-09-26 20:11  dangelo
+
+	* freepv/trunk/src/libfreepv/Parameters.cpp: fixed crash if cmd
+	  line parameters do not contain a "=" char
+
+2006-09-26 20:08  dangelo
+
+	* freepv/trunk/src/freepv-mozilla,
+	  freepv/trunk/src/freepv-mozilla/FreePV.vcproj,
+	  freepv/trunk/src/freepv-mozilla/Makefile.am,
+	  freepv/trunk/src/freepv-mozilla/freepv.rc,
+	  freepv/trunk/src/freepv-mozilla/np_entry.cpp,
+	  freepv/trunk/src/freepv-mozilla/npn_gate.cpp,
+	  freepv/trunk/src/freepv-mozilla/npp_gate.cpp,
+	  freepv/trunk/src/freepv-mozilla/npplat.h,
+	  freepv/trunk/src/freepv-mozilla/plugin.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin.h,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.cpp,
+	  freepv/trunk/src/freepv-mozilla/plugin_unix.h,
+	  freepv/trunk/src/freepv-mozilla/plugin_windows.cpp,
+	  freepv/trunk/src/freepv-mozilla/pluginbase.h,
+	  freepv/trunk/src/freepv-mozilla/resource.h: added first try at
+	  mozilla plugin
+
+2006-09-26 13:40  dangelo
+
+	* freepv/trunk/src/freepv.sln: updated msvc solution with relative
+	  paths
+
+2006-09-26 13:39  dangelo
+
+	* freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/libfreepv.vcproj: added changes by
+	  thomas:
+	  improved speed of cubic tile generation
+	  disabled stupid qtvr parser on windows.
+
+2006-09-26 13:35  dangelo
+
+	* freepv/trunk/src/freepv-glut,
+	  freepv/trunk/src/freepv-glut/Makefile.am,
+	  freepv/trunk/src/freepv-glut/freepv-glut.cpp,
+	  freepv/trunk/src/freepv-glut/freepv-glut.vcproj,
+	  freepv/trunk/src/freepv-glut/glut_platform.cpp,
+	  freepv/trunk/src/freepv-glut/glut_platform.h,
+	  freepv/trunk/src/freepv-glut/main.cpp: added glut platform by
+	  thomas.
+	  fixed timer event handling and added mouse wheel.
+	  provide events with mouse button states.
+	  disabled precompiled headers.
+
+2006-09-16 21:00  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/m4/ax_opengl.m4: updated
+	  configure script
+
+2006-09-16 20:58  dangelo
+
+	* freepv/trunk/src/libfreepv/glutfont/Makefile.in: removed
+
+2006-09-16 20:57  dangelo
+
+	* freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/FPV_keysyms.h,
+	  freepv/trunk/src/libfreepv/Image.cpp,
+	  freepv/trunk/src/libfreepv/Image.h,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/JpegReader.h,
+	  freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.h,
+	  freepv/trunk/src/libfreepv/Platform.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.h,
+	  freepv/trunk/src/libfreepv/Renderer.h,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h,
+	  freepv/trunk/src/libfreepv/glutfont,
+	  freepv/trunk/src/libfreepv/glutfont/Makefile.am,
+	  freepv/trunk/src/libfreepv/glutfont/Makefile.in,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font.h,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_font_data.c,
+	  freepv/trunk/src/libfreepv/glutfont/freeglut_glutfont_definitions.c,
+	  freepv/trunk/src/libfreepv/utils.cpp,
+	  freepv/trunk/src/libfreepv/utils.h: added display of text
+	  messages, using code borrowed from freeglut.
+
+2006-09-15 21:04  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp: fixed crash if
+	  panorama could not be loaded
+
+2006-09-15 21:02  dangelo
+
+	* freepv/trunk/configure.in, freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/freepv-glx/Makefile.am,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.cpp,
+	  freepv/trunk/src/libfreepv/QTVRDecoder.h,
+	  freepv/trunk/src/libfreepv/Scene.h,
+	  freepv/trunk/src/libfreepv/utils.cpp,
+	  freepv/trunk/src/libfreepv/utils.h: -added (preliminary) support
+	  for QTVR files. Only simple files without preview tracks and
+	  other complicated stuff are supported
+	  - changed zoom speed calculation. Should be more predictable now.
+
+2006-09-15 17:39  dangelo
+
+	* freepv/trunk/freepv.kdevelop,
+	  freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/Scene.h: - scale cube face size
+	  texture size to next available
+	  - faster loading of cubic panoramas
+	  - added support for downloading to a file
+
+2006-09-14 15:05  dangelo
+
+	* freepv/trunk/src/freepv-glx/glx_platform.cpp,
+	  freepv/trunk/src/freepv-glx/glx_platform.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h: added download to file
+	  function
+
+2006-09-14 12:23  dangelo
+
+	* freepv/trunk/doc, freepv/trunk/src/freepv-glx,
+	  freepv/trunk/src/libfreepv,
+	  freepv/trunk/src/libfreepv/Platform.h, freepv/trunk/src/msvc:
+	  added declarations of file download
+
+2006-09-14 12:18  dangelo
+
+	* freepv/trunk, freepv/trunk/Doxyfile, freepv/trunk/src,
+	  freepv/trunk/src/freepv-glx, freepv/trunk/src/freepv.sln,
+	  freepv/trunk/src/libfreepv,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/Image.cpp,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/Scene.h,
+	  freepv/trunk/src/libfreepv/libfreepv.vcproj: initial support for
+	  building with MSVC
+
+2006-09-14 09:16  dangelo
+
+	* freepv/trunk/COPYING: initial version accidentally shipped with
+	  GPL license instead of LGPL
+
+2006-09-14 00:16  dangelo
+
+	* freepv/trunk/src/freepv-glx/crate.rgb: removed obselete file
+
+2006-09-14 00:07  dangelo
+
+	* freepv, freepv/branches, freepv/tags, freepv/trunk,
+	  freepv/trunk/AUTHORS, freepv/trunk/COPYING,
+	  freepv/trunk/ChangeLog, freepv/trunk/Doxyfile,
+	  freepv/trunk/INSTALL, freepv/trunk/Makefile.am,
+	  freepv/trunk/Makefile.cvs, freepv/trunk/NEWS,
+	  freepv/trunk/README, freepv/trunk/TODO,
+	  freepv/trunk/config.guess, freepv/trunk/config.sub,
+	  freepv/trunk/configure.in, freepv/trunk/depcomp,
+	  freepv/trunk/freepv.kdevelop, freepv/trunk/install-sh,
+	  freepv/trunk/libtool, freepv/trunk/ltmain.sh, freepv/trunk/m4,
+	  freepv/trunk/m4/ax_check_graphics.m4,
+	  freepv/trunk/m4/ax_opengl.m4, freepv/trunk/missing,
+	  freepv/trunk/mkinstalldirs, freepv/trunk/src,
+	  freepv/trunk/src/Makefile.am, freepv/trunk/src/freepv-glx,
+	  freepv/trunk/src/freepv-glx/Makefile.am,
+	  freepv/trunk/src/freepv-glx/crate.rgb,
+	  freepv/trunk/src/freepv-glx/glx_platform.cpp,
+	  freepv/trunk/src/freepv-glx/glx_platform.h,
+	  freepv/trunk/src/freepv-glx/main.cpp,
+	  freepv/trunk/src/libfreepv,
+	  freepv/trunk/src/libfreepv/Controller.h,
+	  freepv/trunk/src/libfreepv/FPV_keysyms.h,
+	  freepv/trunk/src/libfreepv/Image.cpp,
+	  freepv/trunk/src/libfreepv/Image.h,
+	  freepv/trunk/src/libfreepv/JpegReader.cpp,
+	  freepv/trunk/src/libfreepv/JpegReader.h,
+	  freepv/trunk/src/libfreepv/Makefile.am,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.cpp,
+	  freepv/trunk/src/libfreepv/OpenGLRenderer.h,
+	  freepv/trunk/src/libfreepv/PanoViewer.cpp,
+	  freepv/trunk/src/libfreepv/PanoViewer.h,
+	  freepv/trunk/src/libfreepv/Parameters.cpp,
+	  freepv/trunk/src/libfreepv/Parameters.h,
+	  freepv/trunk/src/libfreepv/Platform.cpp,
+	  freepv/trunk/src/libfreepv/Platform.h,
+	  freepv/trunk/src/libfreepv/Renderer.h,
+	  freepv/trunk/src/libfreepv/Scene.cpp,
+	  freepv/trunk/src/libfreepv/Scene.h, freepv/trunk/templates,
+	  freepv/trunk/templates/cpp, freepv/trunk/templates/h: Initial
+	  Import
+

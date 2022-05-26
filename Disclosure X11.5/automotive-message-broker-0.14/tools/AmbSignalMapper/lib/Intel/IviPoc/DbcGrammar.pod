@@ -1,0 +1,87 @@
+#Copyright (C) 2012 Intel Corporation
+
+#This library is free software; you can redistribute it and/or
+#modify it under the terms of the GNU Lesser General Public
+#License as published by the Free Software Foundation; either
+#version 2.1 of the License, or (at your option) any later version.
+
+#This library is distributed in the hope that it will be useful,
+#but WITHOUT ANY WARRANTY; without even the implied warranty of
+#MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+#Lesser General Public License for more details.
+
+#You should have received a copy of the GNU Lesser General Public
+#License along with this library; if not, write to the Free Software
+#Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+
+=head1 NAME
+
+Intel::IviPoc::DbcGrammar - Vector CANdb++ (*.dbc) file format parser
+
+=head1 SYNOPSIS
+
+	use Intel::IviPoc::DbcGrammar;
+
+	my $result;
+	$result = $parser->DbcOutput($text);
+	my %jsonroot = %{$result};
+
+=head1 REQUIRES
+
+Perl 5.006, Parse::RecDescent, Intel::IviPoc::AmbCommon
+
+=head1 EXPORTS
+
+new
+
+=head1 DESCRIPTION
+
+The Parse::RecDescent - Generate Recursive-Descent Parsers is Perl library for recursive top-down parsing(LL).
+
+=head1 METHODS
+
+=over 4
+
+=item DbcOutput $text
+
+Parses the provided string $text
+Returns the hash representing the entire $text.
+
+=item new
+
+Returns an instance of DbcParser.
+
+=back
+
+=head1 AUTHOR
+
+IntelIVIPoc, C<< <ivipoc at intel.com> >>
+
+=head1 SEE ALSO
+
+L<strict|http://search.cpan.org/~jtbraun/Parse-RecDescent-1.967009/lib/Parse/RecDescent.pm>
+
+=head1 ACKNOWLEDGEMENTS
+
+=head1 LICENSE AND COPYRIGHT
+
+
+Copyright (C) 2012 Intel Corporation
+
+This library is free software; you can redistribute it and/or
+modify it under the terms of the GNU Lesser General Public
+License as published by the Free Software Foundation; either
+version 2.1 of the License, or (at your option) any later version.
+
+This library is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+Lesser General Public License for more details.
+
+You should have received a copy of the GNU Lesser General Public
+License along with this library; if not, write to the Free Software
+Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
+
+
+=cut
