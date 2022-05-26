@@ -1,0 +1,7 @@
+Pablo d'Angelo <pablo.dangelo@web.de>  main viewer, glx platform and mozilla plugin
+Thomas Rauscher    GLUT platform
+Brian Greenstone   QTVR decoder
+Fulvio Senore      initial mozilla plugin
+Leon Moctezuma
+
+Bartosz Walicki    Arch Linux port based on https://packages.gentoo.org/packages/media-gfx/freepv patches
