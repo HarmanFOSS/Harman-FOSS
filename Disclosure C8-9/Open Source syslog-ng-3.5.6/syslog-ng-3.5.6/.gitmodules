@@ -1,0 +1,9 @@
+[submodule "modules/afmongodb/libmongo-client"]
+	path = modules/afmongodb/libmongo-client
+	url = https://github.com/algernon/libmongo-client.git
+[submodule "lib/ivykis"]
+	path = lib/ivykis
+        url = https://github.com/buytenh/ivykis.git
+[submodule "modules/afamqp/rabbitmq-c"]
+	path = modules/afamqp/rabbitmq-c
+	url = https://github.com/alanxz/rabbitmq-c.git
