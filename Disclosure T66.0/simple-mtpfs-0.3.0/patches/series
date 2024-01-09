@@ -1,0 +1,16 @@
+simple-mtpfs-20171124.patch -p1
+simple-mtpfs-20180725-fix-block-for-mmt.patch -p1
+simple-mtpfs-20180925-fix-s8_audio_loss-for-mmt.patch -p1
+simple-mtpfs-20181127-change_smtp_database_path_and_add_env.patch -p1
+simple-mtpfs-20190215-fix-mtp-crash-ticket-232633306.patch -p1
+simple-mtpfs-20190417-fix-access-issue-ticket-232656009.patch -p1
+simple-mtpfs-20190520-new-designed-log-system.patch -p1
+simple-mtpfs-20190610-fix-device-detection-issue.patch -p1
+simple-mtpfs-20190620-fix-MTP-with-SDCard-detection-issue.patch -p1
+simple-mtpfs-20190716-fix-MTP-cannot-sync-complete-issue.patch -p1
+simple-mtpfs-20191210-new-solution-of-syncing-mtp-device.patch -p1
+simple-mtpfs-20200204-fixing-crashing-issue-once-MTP-disconnected.patch -p1
+simple-mtpfs-20200323-config-from-MediaOne.patch -p1
+simple-mtpfs-20200426-Cache-file-for-MediaOne.patch -p1
+simple-mtpfs-20200622-log-output-dlt.patch -p1
+simple-mtpfs-20200814-friendlyName_cacheCmd.patch -p1
