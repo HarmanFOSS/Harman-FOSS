@@ -1,0 +1,689 @@
+*******************************************************************************
+Date         : 2020-08-14
+Author       : Shanyi He
+Harman International Industries, Incorporated
+
+Description  : 1. add ioctl cmd for get friendly name;
+					2. add ioctl cmd to handle cache new track.
+ChangeList   : 5575157
+*******************************************************************************
+
+diff --git a/src/simple-mtpfs-fuse.cpp b/src/simple-mtpfs-fuse.cpp
+index 87980fc..c151b3b 100755
+--- a/src/simple-mtpfs-fuse.cpp
++++ b/src/simple-mtpfs-fuse.cpp
+@@ -1163,48 +1163,53 @@ int SMTPFileSystem::ioctl(const char *path, int cmd, void *arg, struct fuse_file
+ 
+    switch (cmd)
+    {
+-   case SMTPFS_CHECKVERSION:
+-   {
+-      ret = ioctlCheckVersion((char *)data, SMTPFS_EVENT_MAXLEN);
+-   }
+-   break;
+-   case SMTPFS_GETEVENT:
+-   {
+-      //LogInfo(" cmd: SMTPFS_GETEVENT, %p, %p", data, arg);
+-      // ret = m_device.getEvent((char *)data, SMTPFS_EVENT_MAXLEN);
+-      ret = ioctlGetTrackList((char *)data, SMTPFS_EVENT_MAXLEN);
+-   }
+-   break;
++      case SMTPFS_CHECKVERSION:
++      {
++         ret = ioctlCheckVersion((char *)data, SMTPFS_EVENT_MAXLEN);
++      }
++      break;
+ 
+-   case SMTPFS_SETEVENT:
+-   {
+-      LogInfo(" cmd: SMTPFS_SETEVENT, %p, %p", data, arg);
+-      ret = m_device.setEvent((char *)data, SMTPFS_EVENT_MAXLEN);
+-   }
+-   break;
++      case SMTPFS_GETEVENT:
++      {
++         ret = m_device.getEvent((char *)data, SMTPFS_EVENT_MAXLEN);
++      }
++      break;
+ 
+-   case SMTPFS_SETCONFIG:
+-   {
+-      LogInfo(" cmd: SMTPFS_SETCONFIG, %p, %p", data, arg);
+-      ret = ioctlSetConfig((char *)data, SMTPFS_EVENT_MAXLEN);
+-   }
+-   break;
++      case SMTPFS_SETEVENT:
++      {
++         LogInfo(" cmd: SMTPFS_SETEVENT, %p, %p", data, arg);
++         ret = m_device.setEvent((char *)data, SMTPFS_EVENT_MAXLEN);
++      }
++      break;
+ 
+-   case SMTPFS_ABORTSCAN:
+-   {
+-      LogInfo("cmd: SMTPFS_ABORTSCAN, abort the MTP scanning");
+-      ret = m_device.abortTask();
+-   }
+-   break;
++      case SMTPFS_SETCONFIG:
++      {
++         LogInfo(" cmd: SMTPFS_SETCONFIG, %p, %p", data, arg);
++         ret = ioctlSetConfig((char *)data, SMTPFS_EVENT_MAXLEN);
++      }
++      break;
+ 
+-   default:
+-   {
+-      LogWarning(" unsupported cmd: %x", cmd);
+-      ret = -EINVAL;
+-   }
+-   break;
+-   }
++      case SMTPFS_ABORTSCAN:
++      {
++         LogInfo("cmd: SMTPFS_ABORTSCAN, abort the MTP scanning");
++         ret = m_device.abortTask();
++      }
++      break;
++      
++      case SMTPFS_GETFRIENDLYNAME:
++      {
++         LogInfo("cmd: SMTPFS_GETFRIENDLYNAME, get MTP friendlyname");
++         ret = m_device.getFriendlyName((char *)data, MTP_NAME_MAXLEN);
++      }
++      break;
+ 
++      default:
++      {
++         LogWarning(" unsupported cmd: %x", cmd);
++         ret = -EINVAL;
++      }
++      break;
++   }
+    //LogInfo(" ioctl, ret: %d", ret);
+ 
+    return ret;
+@@ -1316,6 +1321,7 @@ int SMTPFileSystem::onFileCache(const std::string& std_path)
+       // use the fd as -1 to persist the local cache file, even if the no app call open for this file.
+       m_tmp_files_pool.addFile(TypeTmpFile(std_path, local_path, -1));
+       LogInfo("Have pulled the file from MTP device to local; source: %s; local: %s; size: %" PRIu64, std_path.c_str(), local_path.c_str(), file->size());
++      m_tmp_files_pool.removeOthersExcept(std_path);
+    }
+    else
+    {
+diff --git a/src/simple-mtpfs-mtp-device.cpp b/src/simple-mtpfs-mtp-device.cpp
+index be151c9..b297442 100755
+--- a/src/simple-mtpfs-mtp-device.cpp
++++ b/src/simple-mtpfs-mtp-device.cpp
+@@ -37,6 +37,7 @@ extern "C" {
+ #include "simple-mtpfs-mtp-device.h"
+ #include "simple-mtpfs-util.h"
+ #include "simple-mtpfs-fuse.h"
++#include "simple-mtpfs.h"
+ 
+ // the time out for libmtp request
+ #define LIBMTP_REQUEST_TIMEOUT                  (500)
+@@ -72,6 +73,7 @@ MTPDevice::MTPDevice(SMTPFileSystem &fs) :
+                          mScanAbort(false),
+                          m_lastMode_sync_done(false),
+                          mNeedCacheFile(false),
++                         mCacheNewTrackCmd(tAsynCommand(SMTPFS_EVENT_CACHE_NEW_TRACK)),
+                          mFolderIgnored(0),
+                          mFileIgnored(0)
+ {
+@@ -1160,6 +1162,77 @@ int MTPDevice::getMediaFileType(const std::string &filename)
+    return ret;
+ }
+ 
++int MTPDevice::handleNewFileCache(const std::string &path)
++{
++   LogInfo("handleNewFileCache Enter: [%s], isScanDone = %d, size = [%d]", path.c_str(), m_list_all_done, m_tmpTrackMetaList.size());
++   if(m_list_all_done)
++   {
++      LogInfo("The scanning is done, No need to cache the track [%s]", path.c_str());
++      return 0;
++   }
++
++   bool isFoundInList = false;
++   bool isFoundIntmp = false;
++   std::vector<smtpfs_trackInfo>::iterator iter = m_trackMetaList.begin();
++   if(!path.empty())
++   {
++      //find from the uploaded list first
++      while(iter != m_trackMetaList.end())
++      {
++         if(0 == strcmp(iter->path, path.c_str()))
++         {
++            isFoundInList = true;
++            break;
++         }
++         iter++;
++      }
++   }
++
++   int ret = 1;
++   if(false == isFoundInList)
++   {
++      //find from pending uploaded list
++      iter = m_tmpTrackMetaList.begin();
++      while(iter != m_tmpTrackMetaList.end())
++      {
++         if((path.empty() && MTP_FILE_TYPE_AUDIO == iter->type) || (!path.empty() && 0 == strcmp(iter->path, path.c_str())))
++         {
++            //if path is empty, cache the first audio track here; or find the target path
++            if(iter->filesize > 0)
++            {
++               isFoundIntmp = true;
++               break;
++            }
++         }
++         iter++;
++      }
++   }
++   
++   if(isFoundInList || isFoundIntmp)
++   {
++      if(0 == (ret = mFileSystem.onFileCache(iter->path)))
++      {
++         mCacheNewTrackCmd.cmdStatus = SMTP_ASYNC_CMD_STATUS_FINISH;
++         mCacheNewTrackCmd.responseData = COMMAND_RESPONSE_STATUS_SUCESS;
++         if (isFoundIntmp)
++         {
++            pushTrackInfo(*iter);
++            m_tmpTrackMetaList.erase(iter);
++         }
++         
++         LogInfo("handleNewFileCache Cache success: [%s]", iter->path);
++      }
++   }
++   else
++   {
++      //if not found the path, the suggest path will be ignored now. if needed, please add logic later
++      LogInfo("Not found in the scanned list, A audio track will be cached in following scanning process!");
++   }
++
++   LogInfo("handleNewFileCache Exit: pList->size = %d, ret = %d", m_tmpTrackMetaList.size(), ret);
++   return ret;
++}
++
+ int MTPDevice::getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicestorage_t *storage, uint32_t id, string &path, const string &lastModePath)
+ {
+    LogDebug("enter scan for folder: %s", path.c_str());
+@@ -1223,16 +1296,24 @@ int MTPDevice::getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicesto
+       usleep(200000);
+    }
+ 
++   /**
++    * Because the bellow API may cost long time, so check whether to cache a new track firstly.
++   */
++   if(lastModePath.empty() && (SMTP_ASYNC_CMD_STATUS_WAIT == mCacheNewTrackCmd.cmdStatus))
++   {
++      LogInfo("handleNewFileCache before get files and folders count!");
++      mCacheNewTrackCmd.cmdStatus = SMTP_ASYNC_CMD_STATUS_EXECUTE;
++      mNeedCacheFile = handleNewFileCache();
++   }
++
+    long t1 = 0, t2 = 0;
+    criticalEnter1();
+-   //LogInfo("lock \n");
+    if (device)
+    {
+       t1 = getSysRunTime();
+       ret = LIBMTP_Get_Files_And_Folders_Count(device, storage->id, id, &objHlds);
+       t2 = getSysRunTime();
+    }
+-   //LogInfo("unlock \n");
+    criticalLeave1();
+    if ((t2 - t1) >= LIBMTP_REQUEST_TIMEOUT)
+    {
+@@ -1261,17 +1342,22 @@ int MTPDevice::getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicesto
+ 
+       if (device == NULL)
+          break;
++      //if a large numer of file in the folder it will costs long time
++      //so check whether to cache new file here
++      if(lastModePath.empty() && (SMTP_ASYNC_CMD_STATUS_WAIT == mCacheNewTrackCmd.cmdStatus))
++      {
++         LogInfo("handleNewFileCache in loop before get objInfo by Handle!");
++         mCacheNewTrackCmd.cmdStatus = SMTP_ASYNC_CMD_STATUS_EXECUTE;
++         mNeedCacheFile = handleNewFileCache();
++      }
+ 
+-      //LogInfo("lock 111\n");
+       long t3 = 0, t4 = 0;
+       criticalEnter1();
+-      //LogInfo("lock 2222\n");
+       t3 = getSysRunTime();
+       LIBMTP_file_t *mtpFile = LIBMTP_Get_Files_And_Folders_ByHandle(device, objHlds.Handler[i]);
+       t4 = getSysRunTime();
+-      //LogInfo("unlock 1111\n");
+       criticalLeave1();
+-      //LogInfo("unlock 2222\n");
++
+       if ((t4 - t3) >= LIBMTP_REQUEST_TIMEOUT)
+       {
+          if (mtpFile != NULL)
+@@ -1393,6 +1479,12 @@ int MTPDevice::getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicesto
+                   }
+                   if (0 == ret)
+                   {
++                     if(SMTP_ASYNC_CMD_STATUS_EXECUTE == mCacheNewTrackCmd.cmdStatus)
++                     {
++                        LogInfo("handleNewFileCache Cache success(new scanned track): [%s]", filePath.c_str());
++                        mCacheNewTrackCmd.cmdStatus = SMTP_ASYNC_CMD_STATUS_FINISH;
++                        mCacheNewTrackCmd.responseData = COMMAND_RESPONSE_STATUS_SUCESS;
++                     }
+                      pushTrackInfo(smtpfsTrack);
+                      mNeedCacheFile = false;
+                   }
+@@ -1460,7 +1552,7 @@ int32_t MTPDevice::autoListAll()
+       return -1;
+    }
+ 
+-   LogInfo("enter\n");
++   LogInfo("autoListAll enter\n");
+ 
+    LIBMTP_devicestorage_t *storage = NULL;
+    string path = "/";
+@@ -1536,6 +1628,11 @@ int32_t MTPDevice::autoListAll()
+    std::vector<smtpfs_trackInfo>().swap(m_tmpTrackMetaList);
+ 
+    m_list_all_done = 1;
++   //if sync done, there is no response to cache command, need to notify
++   if(mCacheNewTrackCmd.cmdStatus > SMTP_ASYNC_CMD_STATUS_INIT)
++   {
++      mFileSystem.onFileInfoAvailable();
++   }
+ 
+    long whole_t2 = getSysRunTime();
+ 
+@@ -1547,7 +1644,7 @@ int32_t MTPDevice::autoListAll()
+ 
+ static void *autoScanItemsRun(void *arg)
+ {
+-   LogInfo("enter");
++   LogInfo("Scan Thread Enter");
+    if (!gMTPDev)
+    {
+       LogInfo("gMTPDev is NULL");
+@@ -1563,7 +1660,7 @@ static void *autoScanItemsRun(void *arg)
+          gMTPDev->autoListAll();
+    } while (0);
+ 
+-   LogInfo("exit");
++   LogInfo("Scan Thread Exit");
+ 
+    return NULL;
+ }
+@@ -1763,6 +1860,111 @@ int32_t MTPDevice::getTrackList(std::vector<smtpfs_trackInfo> &trackList, int32_
+    return (int32_t)trackList.size();
+ }
+ 
++int32_t MTPDevice::getFriendlyName(char *name, uint32_t len)
++{
++   char* mtpName = LIBMTP_Get_Friendlyname(m_device);
++   if (NULL == mtpName)
++   {
++      LogError("getFriendlyName LIBMTP_Get_Friendlyname with NULL!");
++      return -1;
++   }
++   LogInfo("MTPDevice::getFriendlyName, %s", mtpName);
++   uint32_t length = strlen(mtpName);
++   if (length >= len)
++   {
++      memcpy(name, mtpName, len-1);
++      name[len-1]='\0';
++      length = len;
++   }
++   else
++   {
++      memcpy(name, mtpName, length+1);
++   }
++   free(mtpName);
++   
++   return length;
++}
++
++int MTPDevice::getEvent(char *data, uint32_t len)
++{
++   if (!data || (len < (int)sizeof(smtpfs_event)))
++   {
++      LogError("data: %p, len: %d", data, len);
++      return -1;
++   }
++
++   uint32_t offset = 0;
++   //fill cache command response data
++   if(SMTP_ASYNC_CMD_STATUS_FINISH == mCacheNewTrackCmd.cmdStatus)
++   {
++      if(len < (sizeof(smtpfs_event) + sizeof(int)))
++      {
++         LogError("len[%u] is too small", len);
++         return -1;
++      }
++      smtpfs_event *pEvent = (smtpfs_event *)(data + offset);
++      pEvent->eventType = SMTPFS_EVENT_CACHE_TRACK_RSP;
++      pEvent->len = sizeof(smtpfs_event);
++
++      int *status = (int *)(data + offset + pEvent->len);
++      *status = mCacheNewTrackCmd.responseData;
++      pEvent->len += sizeof(int);
++      offset = pEvent->len;
++      mCacheNewTrackCmd = tAsynCommand(SMTPFS_EVENT_CACHE_NEW_TRACK);
++   }
++
++   //fill the track list
++   {
++      uint32_t rLen = len - offset;
++      if (rLen < (sizeof(smtpfs_event) + sizeof(smtpfs_trackList) + sizeof(smtpfs_trackInfo)))
++      {
++         LogError("rLen[%u] is too small", rLen);
++         return (offset > 0) ? offset : -1;
++      }
++      
++      int32_t trackCount = (rLen - sizeof(smtpfs_event) - sizeof(smtpfs_trackList)) / sizeof(smtpfs_trackInfo);
++      std::vector<smtpfs_trackInfo> trackList;
++      int32_t ret = 0;
++
++      ret = getTrackList(trackList, trackCount);
++
++      smtpfs_event *pEvent = (smtpfs_event *)(data + offset);
++      pEvent->eventType = SMTPFS_EVENT_TRACKLIST;
++      pEvent->len = sizeof(smtpfs_event);
++
++      smtpfs_trackList *trackListHeader = (smtpfs_trackList *)(data + offset + pEvent->len);
++      trackListHeader->fragment = 1;
++      trackListHeader->count = 0;
++      pEvent->len += sizeof(smtpfs_trackList);
++
++      if (ret < 0)
++      {
++         LogInfo("getTrackList failed; there is no track info any more; ret: %d", ret);
++         trackListHeader->fragment = 0;
++      }
++      else if (trackList.empty())
++      {
++         LogDebug("not track info available, pending");
++         pEvent->len = 0;
++      }
++      else
++      {
++         // fill the track list
++         smtpfs_trackInfo *track = (smtpfs_trackInfo *)(data + offset + pEvent->len);
++         for (auto it = trackList.begin(); it != trackList.end(); ++ it)
++         {
++            *track = *it;
++            ++ track;
++            ++ trackListHeader->count;
++            pEvent->len += sizeof(smtpfs_trackInfo);
++         }
++         LogDebug("track info count: %d; len: %u", trackListHeader->count, pEvent->len);
++      }
++      offset += pEvent->len;
++   }
++   return offset;
++}
++
+ int MTPDevice::setEvent(char *buf, uint32_t bufLen)
+ {
+    if (!buf || (bufLen < (int)sizeof(smtpfs_event)))
+@@ -1790,6 +1992,33 @@ int MTPDevice::setEvent(char *buf, uint32_t bufLen)
+ 
+       setLastModeSyncPath(lastModeEvent->path);
+    }
++   else if (pEvent->eventType == SMTPFS_EVENT_CACHE_NEW_TRACK)
++   {
++      if(Config::instance().getEnableCacheFirstFile())
++      {
++         if(m_list_all_done)
++         {
++            LogInfo("The scanning is done, there is no need to cache the track!");
++            return -1;
++         }
++         if(mNeedCacheFile && (0 == m_tmpTrackMetaList.size()))
++         {
++            LogInfo("LastMode or First track is on going, no need to cache the track!");
++            return -1;
++         }
++
++         if(SMTP_ASYNC_CMD_STATUS_INIT == mCacheNewTrackCmd.cmdStatus)
++         {
++            //smtpfs_sync_lastmode *cacheEvent = (smtpfs_sync_lastmode *)(buf + sizeof(smtpfs_event));
++            mCacheNewTrackCmd.cmdStatus = SMTP_ASYNC_CMD_STATUS_WAIT;
++         }
++      }
++      else
++      {
++         LogInfo("Not enable filecache solution,so no need to cache the track!");
++         return -1;
++      }
++   }
+ 
+    return 0;
+ }
+diff --git a/src/simple-mtpfs-mtp-device.h b/src/simple-mtpfs-mtp-device.h
+index 375b134..8e48827 100755
+--- a/src/simple-mtpfs-mtp-device.h
++++ b/src/simple-mtpfs-mtp-device.h
+@@ -38,6 +38,40 @@ extern "C" {
+ // definition for SMTPFileSystem
+ class SMTPFileSystem;
+ 
++typedef enum
++{
++  SMTP_ASYNC_CMD_STATUS_INIT = 0, // receive a command and initial status
++  SMTP_ASYNC_CMD_STATUS_WAIT,     // put into the queue and waiting to execute
++  SMTP_ASYNC_CMD_STATUS_EXECUTE,  // in executing status
++  SMTP_ASYNC_CMD_STATUS_FINISH    // command execute finished and should to response to app
++} eAsynCmdStatus;
++
++#define SMTP_COMMAND_EXTRA_INFO_MAX_LEN (512)
++typedef struct _AsynCommand
++{
++    int cmdCode;
++    eAsynCmdStatus cmdStatus;
++    int responseData;
++    char extraInfo[SMTP_COMMAND_EXTRA_INFO_MAX_LEN];
++
++    _AsynCommand(int code)
++    {
++        cmdCode = code;
++        cmdStatus = SMTP_ASYNC_CMD_STATUS_INIT;
++        responseData = -1;
++        memset(extraInfo, 0x0, SMTP_COMMAND_EXTRA_INFO_MAX_LEN);
++    }
++    
++    _AsynCommand(int code, char *info, int len)
++    {
++        cmdCode = code;
++        cmdStatus = SMTP_ASYNC_CMD_STATUS_INIT;
++        responseData = -1;
++        memset(extraInfo, 0x0, SMTP_COMMAND_EXTRA_INFO_MAX_LEN);
++        memcpy(extraInfo, info, len);
++    }
++} tAsynCommand;
++
+ #ifdef MTP_HAS_DB
+ class MTPDevice : public SIMPLE_DB
+ #else
+@@ -111,7 +145,9 @@ class MTPDevice
+    bool isFileExist(const uint32_t id);
+    int32_t autoListAll();
+    int32_t getTrackList(std::vector<smtpfs_trackInfo> &trackList, int32_t count);
++   int32_t getFriendlyName(char *name, uint32_t len);
+    int setEvent(char *buf, uint32_t bufLen);
++   int getEvent(char *data, uint32_t len);
+    int launchTasks();
+    int abortTask();
+    bool isListAllDone() { return m_list_all_done; };
+@@ -134,6 +170,7 @@ class MTPDevice
+    bool connect_priv(int dev_no, const std::string &dev_file);
+    int getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicestorage_t *storage, const uint32_t id, string &path, const string &lastModePath = "");
+    int readByRingBuf(const uint32_t id, const uint64_t fileSize, const uint32_t size, const uint32_t offset, const unsigned char *buf);
++   int handleNewFileCache(const std::string &path = "");
+    void printTrackInfo(const smtpfs_trackInfo *track);
+    int fillTrackInfo(smtpfs_trackInfo *dst, const LIBMTP_track_t *src, const char *path, int type);
+    int fillTrackInfoByFile(smtpfs_trackInfo *dst, const LIBMTP_file_t *src, const char *path, int type);
+@@ -185,6 +222,7 @@ class MTPDevice
+ 
+    // need cache the scanned file
+    bool mNeedCacheFile;
++   tAsynCommand mCacheNewTrackCmd;
+ 
+    int32_t mScanThPolicy;
+    int32_t mScanThPriority;
+diff --git a/src/simple-mtpfs-tmp-files-pool.cpp b/src/simple-mtpfs-tmp-files-pool.cpp
+index 6eb285b..e8f3cef 100755
+--- a/src/simple-mtpfs-tmp-files-pool.cpp
++++ b/src/simple-mtpfs-tmp-files-pool.cpp
+@@ -63,6 +63,27 @@ void TmpFilesPool::removeFile(const std::string &path)
+    m_pool.erase(it);
+ }
+ 
++void TmpFilesPool::removeOthersExcept(const std::string &std_path)
++{
++   std::set<TypeTmpFile>::iterator it = m_pool.begin();
++   while(it != m_pool.end())
++   {
++      if(it->pathDevice() != std_path)
++      {
++         const std::string tmp_path = it->pathTmp();
++         LogInfo("%s will be erased!+++", tmp_path.c_str());
++         it = m_pool.erase(it);
++         ::unlink(tmp_path.c_str());
++         LogInfo("%s erased over!---", tmp_path.c_str());
++      }
++      else
++      {
++         it++;
++      }
++   }
++   LogInfo("Exit removeOthersExcept function!");
++}
++
+ bool TmpFilesPool::hasFreeSpace(uint64_t size)
+ {
+    struct statfs s;
+diff --git a/src/simple-mtpfs-tmp-files-pool.h b/src/simple-mtpfs-tmp-files-pool.h
+index 23d0153..409ca93 100755
+--- a/src/simple-mtpfs-tmp-files-pool.h
++++ b/src/simple-mtpfs-tmp-files-pool.h
+@@ -35,6 +35,7 @@ class TmpFilesPool
+ 
+    void addFile(const TypeTmpFile &tmp) { m_pool.insert(tmp); }
+    void removeFile(const std::string &path);
++   void removeOthersExcept(const std::string &std_path);
+    bool empty() const { return m_pool.size(); }
+    bool hasFreeSpace(uint64_t size);
+ 
+diff --git a/src/simple-mtpfs.h b/src/simple-mtpfs.h
+index f8d17f9..013fd6b 100755
+--- a/src/simple-mtpfs.h
++++ b/src/simple-mtpfs.h
+@@ -23,7 +23,6 @@
+ 
+ // the internal version of simple-mtpfs, it need to be updated if the interface file "simple-mtpfs.h" be modified
+ #define SMTPFS_INTERNAL_VERSION     ((uint64_t)1)
+-
+ #define SMTPFS_EVENT_MAXLEN (8 * 1024) //128k
+ 
+ // SMTPFS_GETVERSION
+@@ -33,25 +32,43 @@ typedef struct
+    uint64_t versionInternal;
+ } smtpfs_version;
+ 
+-typedef struct
++enum
++{
++   COMMAND_RESPONSE_STATUS_SUCESS = 0,
++   COMMAND_RESPONSE_STATUS_FAILED = -1
++};
++
++typedef enum
+ {
+-#define SMTPFS_EVENT_SYNC_LASTMODE (0x01)
+-#define SMTPFS_EVENT_TRACKLIST (0x02)
+-   int eventType;
+-   int len; //include the event struct itself
++   SMTPFS_EVENT_SYNC_LASTMODE = 0x01,
++   SMTPFS_EVENT_TRACKLIST = 0x02,
++   SMTPFS_EVENT_CACHE_NEW_TRACK = 0x03,
++   SMTPFS_EVENT_CACHE_TRACK_RSP = 0x04
++} eMtpEvent;
++
++typedef struct
++{ 
++   int eventType;        //enum eMtpEvent
++   int len;             //include the event struct itself
+ } smtpfs_event;
+ 
++#define MTP_NAME_MAXLEN (128)
+ #define MTP_PATHNAME_MAXLEN (512)
+ #define MTP_METADATA_NAME_MAXLEN (128)
++
++typedef enum
++{
++   MTP_FILE_TYPE_UNKNOWN = 0x0,
++   MTP_FILE_TYPE_AUDIO = 0x01,
++   MTP_FILE_TYPE_VIDEO = 0x02,
++   MTP_FILE_TYPE_IMAGE = 0x04,
++   MTP_FILE_TYPE_PLAYLIST = 0x08,
++   MTP_FILE_TYPE_AUDIOBOOKS = 0x10
++} eMtpFileType;
++
+ typedef struct
+ {
+-#define MTP_FILE_TYPE_UNKNOWN (0x0)
+-#define MTP_FILE_TYPE_AUDIO (0x1)
+-#define MTP_FILE_TYPE_VIDEO (0x2)
+-#define MTP_FILE_TYPE_IMAGE (0x4)
+-#define MTP_FILE_TYPE_PLAYLIST (0x8)
+-#define MTP_FILE_TYPE_AUDIOBOOKS (0x10)
+-   int type;
++   int type;          //enum eMtpFileType
+    char path[MTP_PATHNAME_MAXLEN]; //folder path
+    //char  fileName[NAME_MAX];//filename
+    char title[MTP_METADATA_NAME_MAXLEN];  /**< Track title */
+@@ -107,6 +124,7 @@ typedef struct
+ #define SMTPFS_CONFIG_CACHEFIRSTFILE (0xb)
+ #define SMTPFS_CONFIG_TMPPATH (0xc)
+ #define SMTPFS_CONFIG_TMPSIZELIMIT (0xd)
++
+ typedef struct
+ {
+    //	the config type
+@@ -120,19 +138,19 @@ typedef struct
+ #define SMTPFSIOCTLNODE "mediaone_smtpfs_node"
+ #define SMTPFSMAGIC 'm'
+ 
+-// check the version
+-#define SMTPFS_CHECKVERSION _IOW(SMTPFSMAGIC, 1, char[SMTPFS_EVENT_MAXLEN])
+-
+-//write  event
+-#define SMTPFS_SETEVENT _IOW(SMTPFSMAGIC, 2, char[SMTPFS_EVENT_MAXLEN])
+-
+-//read event
+-#define SMTPFS_GETEVENT _IOR(SMTPFSMAGIC, 3, char[SMTPFS_EVENT_MAXLEN])
+-
+-//  set config from MediaOne
+-#define SMTPFS_SETCONFIG _IOW(SMTPFSMAGIC, 4, char[SMTPFS_EVENT_MAXLEN])
+-
+-// abort the MTP scanning
+-#define SMTPFS_ABORTSCAN _IOW(SMTPFSMAGIC, 5, char[SMTPFS_EVENT_MAXLEN])
++#define DCMD_SMTP_IOCTL_CHECK_VERSION  1
++#define DCMD_SMTP_IOCTL_SET_EVENT      2
++#define DCMD_SMTP_IOCTL_GET_EVENT      3
++#define DCMD_SMTP_IOCTL_SET_CONFIG     4
++#define DCMD_SMTP_IOCTL_ABORT_SCAN     5
++#define DCMD_SMTP_IOCTL_GET_LABLE      6
++
++//define the ioctl command for mtp operations
++#define SMTPFS_CHECKVERSION      _IOW(SMTPFSMAGIC, DCMD_SMTP_IOCTL_CHECK_VERSION, char[SMTPFS_EVENT_MAXLEN])
++#define SMTPFS_SETEVENT          _IOW(SMTPFSMAGIC, DCMD_SMTP_IOCTL_SET_EVENT, char[SMTPFS_EVENT_MAXLEN])
++#define SMTPFS_GETEVENT          _IOR(SMTPFSMAGIC, DCMD_SMTP_IOCTL_GET_EVENT, char[SMTPFS_EVENT_MAXLEN])
++#define SMTPFS_SETCONFIG         _IOW(SMTPFSMAGIC, DCMD_SMTP_IOCTL_SET_CONFIG, char[SMTPFS_EVENT_MAXLEN])
++#define SMTPFS_ABORTSCAN         _IOW(SMTPFSMAGIC, DCMD_SMTP_IOCTL_ABORT_SCAN, char[SMTPFS_EVENT_MAXLEN])
++#define SMTPFS_GETFRIENDLYNAME   _IOR(SMTPFSMAGIC, DCMD_SMTP_IOCTL_GET_LABLE, char[MTP_NAME_MAXLEN])
+ 
+ #endif
+\ No newline at end of file
