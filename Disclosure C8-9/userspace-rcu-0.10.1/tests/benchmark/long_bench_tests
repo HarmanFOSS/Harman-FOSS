@@ -1,2 +1,0 @@
-./run-urcu-tests.sh 30
-./runhash.sh 30

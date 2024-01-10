@@ -1,8 +1,0 @@
-makefile-destdir.patch -p1
-makefile-libs.patch -p1
-makefile-strip.patch -p1
-change-secure_chroot_dir.patch -p1
-vsftpd-2.1.0-filter.patch -p1
-0001-vsftpd-allow-sysinfo-in-the-seccomp-sandbox.patch -p1
-vsftpd-tcp_wrappers-support.patch -p1
-0001-sysdeputil.c-Fix-with-musl-which-does-not-have-utmpx.patch -p1

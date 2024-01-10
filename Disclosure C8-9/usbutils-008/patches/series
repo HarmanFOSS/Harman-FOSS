@@ -1,3 +1,0 @@
-usb-devices-avoid-dependency-on-bash.patch -p1
-Fix-NULL-pointer-crash.patch -p1
-iconv.patch -p1
