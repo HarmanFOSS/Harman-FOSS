@@ -1,0 +1,13 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+datarootdir=@datarootdir@
+datadir=@datadir@
+
+Name: persistence client library
+Description: persistence client library 
+Version: @VERSION@
+Requires: automotive-dlt
+Libs: -L${libdir} -lrt -ldl
+Cflags: -I${includedir}
