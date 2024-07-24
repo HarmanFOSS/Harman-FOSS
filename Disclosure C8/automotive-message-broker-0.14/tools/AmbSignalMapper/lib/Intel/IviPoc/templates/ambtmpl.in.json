@@ -1,7 +1,0 @@
-{
-	"name" : "AmbTmpl",
-	"path" : "@PLUGIN_INSTALL_PATH@/ambtmpl_plugin.so",
-	"frequency" : "10",
-	"enabled" : true,
-	"interface" : "@DEFAULT_CAN_INTERFACE@"
-}

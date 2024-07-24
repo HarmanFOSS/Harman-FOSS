@@ -1,8 +1,0 @@
-Logreplayer
-==================================
-Author: Marco Residori <marco_residori@mentor.com>
-
-Overview
---------
-The logreplayer is just a simple tool that was written to test GNSSService and SensorsService.
-The logreplayer is not an official GENIVI component. 

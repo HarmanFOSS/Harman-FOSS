@@ -1,5 +1,0 @@
-{
-	"name" : "Chrony plugin",
-	"path" : "@PLUGIN_INSTALL_PATH@/chrony.so",
-	"enabled" : true
-}
