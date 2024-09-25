@@ -1,0 +1,41 @@
+lttng-set-session(1)
+====================
+
+
+NAME
+----
+lttng-set-session - Set the current LTTng tracing session
+
+
+SYNOPSIS
+--------
+[verse]
+*lttng* ['linkgenoptions:(GENERAL OPTIONS)'] *set-session* 'SESSION'
+
+
+DESCRIPTION
+-----------
+The `lttng set-session` command sets the current tracing session.
+
+'SESSION' is the name of an existing tracing session. `lttng list`
+outputs all the existing tracing sessions (see man:lttng-list(1)).
+
+The current tracing session is used by default when a session can be
+specified in other commands. See man:lttng-create(1) for more
+information about the current tracing session.
+
+
+include::common-cmd-options-head.txt[]
+
+
+include::common-cmd-help-options.txt[]
+
+
+include::common-cmd-footer.txt[]
+
+
+SEE ALSO
+--------
+man:lttng-create(1),
+man:lttng-destroy(1),
+man:lttng(1)
