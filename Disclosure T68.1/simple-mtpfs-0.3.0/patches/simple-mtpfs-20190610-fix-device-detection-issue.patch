@@ -1,0 +1,92 @@
+*******************************************************************************
+Date         : 2019-06-10
+Author       : Yi Wang
+Harman International Industries, Incorporated
+
+Description  : This patch is for fixing mtp device detection issue
+ChangeList   : 5399267
+*******************************************************************************
+
+diff --git a/src/simple-mtpfs-log.cpp b/src/simple-mtpfs-log.cpp
+index 6c0c448..ef3b075 100755
+--- a/src/simple-mtpfs-log.cpp
++++ b/src/simple-mtpfs-log.cpp
+@@ -23,13 +23,14 @@
+ bool Logger::m_isInited = false;
+ Logger::SMTP_LOG_LEVEL Logger::m_logLevel = SMTP_LOG_LEVEL_INFO;
+ string Logger::m_logPath = "/tmp/smtp.log";
++int Logger::m_stdout = -1;
+ 
+ void Logger::init()
+ {
+     if (m_isInited) {
+         return;
+     }
+- 
++    m_stdout = dup(fileno(stdout));
+     freopen(m_logPath.c_str(), "w", stdout);
+ 
+     /* before smtp running, we can set log level by set the environment variable  SMTP_LOG_LEVEL */
+@@ -155,6 +156,22 @@ long Logger::getSysRunTime()
+            ts.tv_nsec / 1000000L;
+ }
+ 
++
++void Logger::off()
++{
++    dup2(m_stdout, fileno(stdout));
++    close(m_stdout);
++    setvbuf(stdout, NULL, _IOLBF, 0);
++}
++
++void Logger::on()
++{
++    fflush(stdout);
++    m_stdout = dup(fileno(stdout));
++    freopen(m_logPath.c_str(), "a", stdout);
++}
++
++
+ string Logger::toString(SMTP_LOG_LEVEL level){
+     switch (level) {
+         case SMTP_LOG_LEVEL_VERBOSE:
+diff --git a/src/simple-mtpfs-log.h b/src/simple-mtpfs-log.h
+index 657e94f..0fec7d7 100755
+--- a/src/simple-mtpfs-log.h
++++ b/src/simple-mtpfs-log.h
+@@ -56,6 +56,8 @@ public:
+     static void init();
+     static void Log(const char *format, SMTP_LOG_LEVEL logLevel, const char* funcName, int line, ...);
+     static bool isEnableLibmtpLog();
++    static void off();
++    static void on();
+ 
+ private:
+     static std::string timestamp();
+@@ -66,6 +68,7 @@ private:
+     static bool m_isInited;
+     static SMTP_LOG_LEVEL m_logLevel;
+     static string m_logPath;
++    static int m_stdout;
+ };
+ 
+ #endif // SMTPFS_LOG_H
+diff --git a/src/simple-mtpfs-mtp-device.cpp b/src/simple-mtpfs-mtp-device.cpp
+index bb8871f..a49e9d6 100755
+--- a/src/simple-mtpfs-mtp-device.cpp
++++ b/src/simple-mtpfs-mtp-device.cpp
+@@ -1088,6 +1088,7 @@ bool MTPDevice::listDevices(bool verbose, const std::string &dev_file)
+ 
+         //printf("vid: %x, pid: %x\n", raw_devices[i].device_entry.vendor_id, raw_devices[i].device_entry.product_id);
+ 
++        Logger::off();
+         std::cout << i + 1 << ": "
+             << (raw_devices[i].device_entry.vendor ? raw_devices[i].device_entry.vendor : "Unknown vendor ")
+             << (raw_devices[i].device_entry.product ? raw_devices[i].device_entry.product : "Unknown product")
+@@ -1106,6 +1107,7 @@ bool MTPDevice::listDevices(bool verbose, const std::string &dev_file)
+                 dev.disconnect();
+             }
+ #endif
++        Logger::on();
+     }
+     free(static_cast<void*>(raw_devices));

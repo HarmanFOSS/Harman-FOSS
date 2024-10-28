@@ -1,0 +1,37 @@
+LTTng Live trace reading how-to
+
+Julien Desfossez
+September 27th, 2013
+
+This document presents a summary on how to use the live trace reading feature
+introduced in LTTng 2.4. For the details about the protocol, please refer to
+the live-reading-protocol.txt document.
+
+Live trace reading refers to the feature of reading the trace while it is being
+recorded. In order to do that, the trace must be streamed a relay even if the
+viewer is running on the same machine as the tracer.
+
+So, the first thing to do is to start a lttng-relayd process. It can be
+anywhere on the network (including localhost) as long as the sessiond/consumerd
+and the viewer can communicate with it over TCP/IP.
+
+$ lttng-relayd -d
+
+Then, we can create a session configured for streaming with the new --live
+parameter.
+
+$ lttng create --live 1000000 -U net://localhost
+
+The --live parameter activates a session-wide timer (usec) that is responsible
+for checking at a user-defined rate if new data is available. If there is new
+data, it is flushed automatically, otherwise a beacon is sent to the relayd to
+inform it that the stream is currently empty and the viewer can ignore this
+stream up to a certain point in time.
+
+Once the session is created, the user can activate events as usual.
+
+In order to view the live trace, the viewer must implement the live-reading
+protocol. As of now, Babeltrace[1] and LTTngTop[2] implement the protocol.
+
+[1] git://git.efficios.com/babeltrace.git
+[2] git://git.lttng.org/lttngtop.git
