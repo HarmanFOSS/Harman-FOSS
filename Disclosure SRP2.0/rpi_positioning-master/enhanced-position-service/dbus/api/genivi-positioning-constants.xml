@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="constants.xsl"?>
+
+<!-- SPDX-License-Identifier: MPL-2.0
+     Component Name: EnhancedPositionService
+     Compliance Level: Abstract Component
+     Copyright (C) 2012, BMW Car IT GmbH, Continental Automotive GmbH, PCA Peugeot Citroën, XS Embedded GmbH
+     License:
+     This Source Code Form is subject to the terms of the
+     Mozilla Public License, v. 2.0. If a copy of the MPL was not distributed with
+     this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+-->
+
+<constants  name="EnhancedPositionService">
+  <version>4.0.0 (11-Feb-2016)</version>
+  <doc>
+    <line>This document defines the constants that are used in the EnhancedPositionService APIs</line>
+    <line>Constants for "Keys" are always individual bits within a 64 bit unsigned integer and are unique within the EnhancedPositionService</line>
+    <line>Constants for "Enums" increment consecutively and are only unique within the context of the specific enum</line>
+  </doc>
+
+  <!-- PositionInfo and PositionFeedback Keys - for use in bit mask -->
+  <id name="LATITUDE"               value="0x00000001" />
+  <id name="LONGITUDE"              value="0x00000002" />
+  <id name="ALTITUDE"               value="0x00000004" />
+  <id name="HEADING"                value="0x00000008" />
+  <id name="SPEED"                  value="0x00000010" />
+  <id name="CLIMB"                  value="0x00000020" />
+  <id name="ROLL_RATE"              value="0x00000040" />
+  <id name="PITCH_RATE"             value="0x00000080" />
+  <id name="YAW_RATE"               value="0x00000100" />
+  <id name="PDOP"                   value="0x00000200" />
+  <id name="HDOP"                   value="0x00000400" />
+  <id name="VDOP"                   value="0x00000800" />
+  <id name="USED_SATELLITES"        value="0x00001000" />
+  <id name="TRACKED_SATELLITES"     value="0x00002000" />
+  <id name="VISIBLE_SATELLITES"     value="0x00004000" />
+  <id name="SIGMA_HPOSITION"        value="0x00008000" />  
+  <id name="SIGMA_ALTITUDE"         value="0x00010000" />
+  <id name="SIGMA_HEADING"          value="0x00020000" />
+  <id name="SIGMA_SPEED"            value="0x00040000" />
+  <id name="SIGMA_CLIMB"            value="0x00080000" />  
+  <id name="GNSS_FIX_STATUS"        value="0x00100000" />
+  <id name="DR_STATUS"              value="0x00200000" />
+  <id name="RELIABILTY_INDEX"       value="0x00400000" />
+  <id name="USED_SATELLITESYSTEMS"  value="0x00800000" />
+
+  <!-- Time Keys - for use in bit mask -->
+  <id name="YEAR"                   value="0x01000000" />
+  <id name="MONTH"                  value="0x02000000" />
+  <id name="DAY"                    value="0x04000000" />
+  <id name="HOUR"                   value="0x08000000" />
+  <id name="MINUTE"                 value="0x10000000" />
+  <id name="SECOND"                 value="0x20000000" />
+  <id name="MS"                     value="0x40000000" />
+  <id name="TIME_SCALE"             value="0x80000000" />
+  <id name="LEAP_SECONDS"          value="0x100000000" />
+
+  <!-- Generic "Enum" values -->
+  <id name="INVALID"                value="0x00000000" />
+
+  <!-- SatelliteSystem Keys - for use in bit mask or as "Enum" -->
+  <id name="GPS"                    value="0x00000001" /> <!-- GPS (L1 signal) -->
+  <id name="GLONASS"                value="0x00000002" /> <!-- GLONASS (L1 signal) -->
+  <id name="GALILEO"                value="0x00000004" /> <!-- GALILEO (E1 signal) -->
+  <id name="BEIDOU"                 value="0x00000008" /> <!-- BeiDou aka COMPASS (B1 signal) -->
+  <id name="COMPASS"                value="0x00000008" /> <!-- COMPASS is a synonym for BeiDou -->
+  <id name="GPS_L2"                 value="0x00000010" /> <!-- GPS (L2 signal) -->
+  <id name="GPS_L5"                 value="0x00000020" /> <!-- GPS (L5 signal -->
+  <id name="GLONASS_L2"             value="0x00000040" /> <!-- GLONASS (L2 signal) -->
+  <id name="BEIDOU_B2"              value="0x00000080" /> <!-- BeiDou aka COMPASS (B2 signal) -->
+  <!-- Numbers >= 0x00010000 are used to identify SBAS (satellite based augmentation system) -->
+  <id name="SBAS_WAAS"              value="0x00010000" /> <!-- WAAS (North America) -->
+  <id name="SBAS_EGNOS"             value="0x00020000" /> <!-- EGNOS (Europe) -->
+  <id name="SBAS_MSAS"              value="0x00040000" /> <!-- MSAS (Japan) -->
+  <id name="SBAS_QZSS_SAIF"         value="0x00080000" /> <!-- QZSS-SAIF (Japan) -->
+  <id name="SBAS_SDCM"              value="0x00100000" /> <!-- SDCM (Russia) -->
+  <id name="SBAS_GAGAN"             value="0x00200000" /> <!-- GAGAN (India) -->
+
+  <!-- PositionFeedback "Enum" -->
+  <id name="MAP_MATCHED_FEEDBACK"   value="0x00000001" />
+  <id name="TEST_FEEDBACK"          value="0x00000002" />
+  
+  <!-- TimeScale "Enum" -->
+  <id name="TIME_SCALE_UTC"         value="0" />
+  <id name="TIME_SCALE_GPS"         value="1" />
+
+  <!-- ... --> 
+</constants>
