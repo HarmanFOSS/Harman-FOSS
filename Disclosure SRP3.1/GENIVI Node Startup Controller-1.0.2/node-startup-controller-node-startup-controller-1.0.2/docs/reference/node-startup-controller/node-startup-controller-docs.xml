@@ -1,0 +1,123 @@
+<?xml version="1.0"?>
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.3//EN"
+                      "http://www.oasis-open.org/docbook/xml/4.3/docbookx.dtd"
+[
+  <!ENTITY % local.common.attrib "xmlns:xi  CDATA  #FIXED 'http://www.w3.org/2003/XInclude'">
+]>
+
+<book id="index" lang="en">
+  <bookinfo>
+    <title>GENIVI Node Startup Controller Reference Manual</title>
+    <releaseinfo>Version <xi:include href="version.xml" parse="text"/></releaseinfo>
+    <copyright>
+      <year>2012</year>
+      <holder>GENIVI</holder>
+    </copyright>
+    <legalnotice id="legalnotice">
+      <para>
+        This reference manual is released under
+        <ulink type="http" url="http://creativecommons.org/publicdomain/zero/1.0/">Creative Commons CC0 1.0 Universal (CC0 1.0)</ulink>.
+        For more information and the legal code of this license, please see the
+        <ulink type="http" url="http://creativecommons.org/publicdomain/zero/1.0/">license website</ulink>.
+      </para>
+    </legalnotice>
+    <authorgroup>
+      <author>
+        <firstname>Ben</firstname>
+        <surname>Brewer</surname>
+        <affiliation>
+          <address><email>ben.brewer@codethink.co.uk</email></address>
+        </affiliation>
+      </author>
+      <author>
+        <firstname>Francisco Redondo</firstname>
+        <surname>Marchena</surname>
+        <affiliation>
+          <address><email>francisco.marchena@codethink.co.uk</email></address>
+        </affiliation>
+      </author>
+      <author>
+        <firstname>Jannis</firstname>
+        <surname>Pohlmann</surname>
+        <affiliation>
+          <address><email>jannis.pohlmann@codethink.co.uk</email></address>
+        </affiliation>
+      </author>
+      <author>
+        <firstname>Jonathan</firstname>
+        <surname>Maw</surname>
+        <affiliation>
+          <address><email>jonathan.maw@codethink.co.uk</email></address>
+        </affiliation>
+      </author>
+    </authorgroup>
+  </bookinfo>
+
+  <part id="overview">
+    <title>Node Startup Controller overview</title>
+    <xi:include href="about.xml"/>
+    <xi:include href="functional-scope.xml"/>
+    <xi:include href="public-interfaces.xml"/>
+    <xi:include href="software-architecture.xml"/>
+  </part>
+
+  <part id="part-building">
+    <title>Building</title>
+    <xi:include href="building.xml"/>
+  </part>
+
+  <part id="testing">
+    <title>Testing</title>
+    <xi:include href="test-nsm-dummy.xml"/>
+    <xi:include href="test-test-environment-setup.xml"/>
+    <xi:include href="test-luc-management.xml"/>
+    <xi:include href="test-legacy-app-handling.xml"/>
+    <xi:include href="test-target-startup-monitoring.xml"/>
+  </part>
+
+  <part id="public-api">
+    <title>Public API</title>
+    <xi:include href="../../../node-startup-controller/doc-org.genivi.NodeStartupController1.NodeStartupController.xml"/>
+    <xi:include href="legacy-app-handler.xml"/>
+  </part>
+
+  <part id="main-classes">
+    <title>Main classes of the Node Startup Controller</title>
+    <xi:include href="xml/node-startup-controller-application.xml"/>
+    <xi:include href="xml/job-manager.xml"/>
+    <xi:include href="xml/la-handler-service.xml"/>
+    <xi:include href="xml/luc-starter.xml"/>
+    <xi:include href="xml/node-startup-controller-service.xml"/>
+    <xi:include href="xml/target-startup-monitor.xml"/>
+  </part>
+
+  <part id="generated-classes">
+    <title>Generated D-Bus classes</title>
+    <xi:include href="xml/node-startup-controller-dbus.xml"/>
+    <xi:include href="xml/la-handler-dbus.xml"/>
+    <xi:include href="xml/nsm-consumer-dbus.xml"/>
+    <xi:include href="xml/nsm-lifecycle-control-dbus.xml"/>
+    <xi:include href="xml/shutdown-consumer-dbus.xml"/>
+    <xi:include href="xml/systemd-manager-dbus.xml"/>
+    <xi:include href="xml/systemd-unit-dbus.xml"/>
+  </part>
+
+  <part id="utilities">
+    <title>Utilities</title>
+    <xi:include href="xml/shutdown-client.xml"/>
+    <xi:include href="xml/watchdog-client.xml"/>
+    <xi:include href="xml/glib-extensions.xml"/>
+    <xi:include href="xml/nsm-enum-types.xml"/>
+  </part>
+
+  <index id="api-index-full">
+    <title>API index</title>
+    <xi:include href="xml/api-index-full.xml">
+      <xi:fallback />
+    </xi:include>
+  </index>
+
+  <xi:include href="xml/annotation-glossary.xml">
+    <xi:fallback />
+  </xi:include>
+</book>
