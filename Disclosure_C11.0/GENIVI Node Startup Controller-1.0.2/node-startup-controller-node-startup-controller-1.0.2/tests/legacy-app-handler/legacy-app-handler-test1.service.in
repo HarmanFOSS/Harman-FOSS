@@ -1,0 +1,4 @@
+[Service]
+ExecStart = @libdir@/node-startup-controller-@NODE_STARTUP_CONTROLLER_VERSION_API@/legacy-app-handler-test Test1
+ExecStartPost = @libdir@/node-startup-controller-@NODE_STARTUP_CONTROLLER_VERSION_API@/legacy-app-handler \
+                --register --unit=legacy-app-handler-test1.service

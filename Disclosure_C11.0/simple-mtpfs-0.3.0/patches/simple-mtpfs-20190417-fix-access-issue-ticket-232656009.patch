@@ -1,0 +1,537 @@
+*******************************************************************************
+Date         : 2019-04-17
+Author       : Jing Deng
+Harman International Industries, Incorporated
+
+Description  : This patch is for medialaunch connect MTP bugs. 
+for mmt2020 project, there is a issue for lastmode. ticket id: 2656009
+getattr return error, that will result access is not invoked
+ChangeList   : 5374712
+*******************************************************************************
+
+diff --git a/src/simple-mtpfs-fuse.cpp b/src/simple-mtpfs-fuse.cpp
+index 55535b7..bfabed8 100755
+--- a/src/simple-mtpfs-fuse.cpp
++++ b/src/simple-mtpfs-fuse.cpp
+@@ -453,71 +453,88 @@ void* SMTPFileSystem::init(struct fuse_conn_info *conn)
+ 
+ int SMTPFileSystem::getattr(const char *path, struct stat *buf)
+ {
+-    //logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", enter\n");
+-
+-    memset(buf, 0, sizeof(struct stat));
+-    struct fuse_context *fc = fuse_get_context();
+-    buf->st_uid = fc->uid;
+-    buf->st_gid = fc->gid;
+-    if (path == std::string("/")) {
+-        buf->st_mode = S_IFDIR | 0775;
+-        buf->st_nlink = 2;
+-        //logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", err000 \n");
+-        return 0;
+-    } else {
+-        std::string tmp_path(smtpfs_dirname(path));
+-        std::string tmp_file(smtpfs_basename(path));
+-        const TypeDir *content = m_device.dirFetchContentFromCache(tmp_path);
+-        if (!content) {
+-           logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", err111\n");
+-            return -ENOENT;
+-        }
+-
+-        if (content->dir(tmp_file)) {
+-            const TypeDir *dir = content->dir(tmp_file);
+-            buf->st_ino = dir->id();
+-            buf->st_mode = S_IFDIR | 0775;
+-            buf->st_nlink = 2;
+-            buf->st_mtime = dir->modificationDate();
+-        } else if (content->file(tmp_file)) {
+-            const TypeFile *file = content->file(tmp_file);
+-            buf->st_ino = file->id();
+-            buf->st_size = file->size();
+-            buf->st_blocks = (file->size() / 512) + (file->size() % 512 > 0 ? 1 : 0);
+-            buf->st_nlink = 1;
+-            buf->st_mode = S_IFREG | 0644;
+-            buf->st_mtime = file->modificationDate();
+-            buf->st_ctime = buf->st_mtime;
+-            buf->st_atime = buf->st_mtime;
+-        } else {
+-
+-            //logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", err222\n");
+-
+-            //find the file from smtpfs.db
+-            uint32_t fileId = 0;
+-            string pathStr = path;
+-            m_device.queryFileID(pathStr, m_device.getUUID(), &fileId);
+-            if(!fileId)
+-            {
+-               logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", pathStr: ", pathStr, " , fileId is 0\n");
+-               logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", tmp_path: ", tmp_path, " \n");
+-               logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", tmp_file: ", tmp_file, " \n");
+-               return 0;
+-            }
+-
+-            //got the fileid
+-            //logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", fileId: ", fileId, "\n");
+-            if(m_device.getFileInfoById(fileId, buf))
+-            {
+-               logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", fileId: ", fileId, ", err333\n");
+-               return -ENOENT;
+-            }
+-        }
+-    }
+-   
+-    //logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", exit\n");
+-    
+-    return 0;
++	//logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", enter\n");
++
++	memset(buf, 0, sizeof(struct stat));
++	struct fuse_context *fc = fuse_get_context();
++	buf->st_uid = fc->uid;
++	buf->st_gid = fc->gid;
++	if (path == std::string("/")) 
++	{
++		buf->st_mode = S_IFDIR | 0775;
++		buf->st_nlink = 2;
++		//logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", err000 \n");
++		return 0;
++	} 
++	else 
++	{
++		bool isFile = isMediaType(path);
++		std::string tmp_path(smtpfs_dirname(path));
++		std::string tmp_file(smtpfs_basename(path));
++		const TypeDir *content = m_device.dirFetchContentFromCache(tmp_path);
++		if (content) 
++		{
++			if (content->dir(tmp_file)) 
++			{
++				const TypeDir *dir = content->dir(tmp_file);
++				buf->st_ino = dir->id();
++				buf->st_mode = S_IFDIR | 0775;
++				buf->st_nlink = 2;
++				buf->st_mtime = dir->modificationDate();
++				//logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", is dir\n");
++				return 0;
++			} 
++			else if (content->file(tmp_file)) 
++			{
++				const TypeFile *file = content->file(tmp_file);
++				buf->st_ino = file->id();
++				buf->st_size = file->size();
++				buf->st_blocks = (file->size() / 512) + (file->size() % 512 > 0 ? 1 : 0);
++				buf->st_nlink = 1;
++				buf->st_mode = S_IFREG | 0644;
++				buf->st_mtime = file->modificationDate();
++				buf->st_ctime = buf->st_mtime;
++				buf->st_atime = buf->st_mtime;
++				//logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", is file\n");
++				return 0;
++			} 
++		}
++
++		if(isFile)
++		{
++			//logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", query file from db\n");
++
++			//find the file from smtpfs.db
++			uint32_t fileId = 0;
++			string pathStr = path;
++			m_device.queryFileID(pathStr, m_device.getUUID(), &fileId);
++
++			//get file info by database
++			if(fileId && !m_device.getFileInfoById(fileId, buf))
++			{
++				//logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", exist in db\n");
++				return 0;
++			}
++			//if the file dose not exist in database
++			else 
++			{
++				logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", fileId: ", fileId, ", not exist in db, failed\n");
++				return -ENOENT;
++			}
++		}
++		else
++		{
++			//check if the dir exist in database
++			buf->st_mode = S_IFDIR | 0775;
++			buf->st_nlink = 2;
++			buf->st_mtime = time(NULL);
++			logmsg("  fun: ", __FUNCTION__, "  path: ", path, ", is fake dir\n");
++		}
++	}
++
++	//logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", exit\n");
++
++	return 0;
+ }
+ 
+ int SMTPFileSystem::mknod(const char *path, mode_t mode, dev_t dev)
+@@ -1006,73 +1023,73 @@ int SMTPFileSystem::ftruncate(const char *path, off_t offset,
+ 
+ int SMTPFileSystem::access(const char *path, int mask)
+ {
+-   logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path: ", path, "\n");
+-
+-   if(!path)
+-   {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path is NULL\n");
+-      return -EINVAL;
+-   }
+-
+-   //1st,check if the path is exist or not from cache pool
+-   std::string tmp_basename(smtpfs_basename(std::string(path)));
+-   std::string tmp_dirname(smtpfs_dirname(std::string(path)));
+-   bool isInCache = true;
+-
+-   logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", basepath: ", tmp_basename, "\n");
+-   logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", dirpath: ", tmp_dirname, "\n");
+-   
+-   const TypeDir *parent = m_device.dirFetchContentFromCache(tmp_dirname);
+-   if (!parent)
+-   {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, "dirname: ", tmp_dirname, " is not exist\n");
+-      isInCache = false;
+-   }
+-
+-   if(tmp_basename == tmp_dirname)
+-   {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", basename == dirname\n");
+-      return 0;
+-   }
+-
+-   if(tmp_basename.empty())
+-   {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", basename is empty\n");
+-      return 0;
+-   }
+-
+-   const TypeFile *file = parent->file(tmp_basename);
+-   if (!file)
+-   {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, "basename: ", tmp_basename, " is not exist\n");
+-      isInCache = false;
+-   }
+-
+-   if(isInCache == false)
+-   {
+-      uint32_t fileId = 0;
+-      string pathStr = path;
+-      m_device.queryFileID(pathStr, m_device.getUUID(), &fileId);
+-      if(!fileId)
+-      {
+-         logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, "basename: ", tmp_basename, " is not exist\n");
+-         return -ENOENT;
+-      }
+-   }
+-
+-   if(mask & W_OK)
+-   {
+-      logmsg(" access, query W_OK return EINVAL\n");
+-      return -EINVAL;
+-   }
+-
+-   if(mask & X_OK)
+-   {
+-      logmsg(" access, query X_OK return EINVAL\n");
+-      return -EINVAL; 
+-   }
+-
+-   logmsg(" access, return ok\n");
+-   return 0;
+-}
+-
++	//logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path: ", path, "\n");
++
++	if(!path)
++	{
++		logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path is NULL\n");
++		return -EINVAL;
++	}
++
++	//1st,check if the path is exist or not from cache pool
++	std::string tmp_basename(smtpfs_basename(std::string(path)));
++	std::string tmp_dirname(smtpfs_dirname(std::string(path)));
++	if(tmp_basename == tmp_dirname)
++	{
++		logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", basename == dirname\n");
++		return 0;
++	}
++
++	if(tmp_basename.empty())
++	{
++		logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", basename is empty\n");
++		return 0;
++	}
++
++	bool isInCache = false;
++
++	const TypeDir *parent = m_device.dirFetchContentFromCache(tmp_dirname);
++	if(parent)
++	{
++		const TypeFile *file = parent->file(tmp_basename);
++		if(file)
++		{
++			//logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path: ", path, ", exist in cache\n");
++			isInCache = true;
++		}
++		else
++		{
++			//logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path: ", path, ", not exist in cache\n");
++			isInCache = false;
++		}
++	}
++
++	if(isInCache == false)
++	{
++		//logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", path: ", path, ", query from db\n");
++
++		uint32_t fileId = 0;
++		string pathStr = path;
++		m_device.queryFileID(pathStr, m_device.getUUID(), &fileId);
++		if(!fileId)
++		{
++			logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, "path: ", path, " not exist in db\n");
++			return -ENOENT;
++		}
++	}
++
++	if(mask & W_OK)
++	{
++		logmsg(" access, query W_OK return EINVAL\n");
++		return -EINVAL;
++	}
++
++	if(mask & X_OK)
++	{
++		logmsg(" access, query X_OK return EINVAL\n");
++		return -EINVAL; 
++	}
++
++	logmsg("  fun: ", __FUNCTION__, ",path: ", path, ", ok\n");
++	return 0;
++}
+\ No newline at end of file
+diff --git a/src/simple-mtpfs-mtp-device.cpp b/src/simple-mtpfs-mtp-device.cpp
+index 7ad5d5d..27378ee 100755
+--- a/src/simple-mtpfs-mtp-device.cpp
++++ b/src/simple-mtpfs-mtp-device.cpp
+@@ -325,7 +325,7 @@ const TypeDir *MTPDevice::dirFetchContentFromCache(std::string path)
+         const TypeDir *tmp = dir->dir(member);
+         if (!tmp)
+         {
+-            logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", not found\n");
++            //logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", not found\n");
+             return nullptr;
+         }
+ 		
+@@ -496,78 +496,6 @@ int MTPDevice::dirFetchCount(std::string path)
+    return 0;
+ }
+ 
+-bool MTPDevice::isMediaType(const char *fileName)
+-{
+-   const char* extArray[] = 
+-   {
+-      ".mp3",
+-      ".wma",
+-      ".aac",
+-      ".wav",
+-      ".wave",
+-      ".flac",
+-      ".oga",
+-      ".ogg",
+-      ".mka",
+-      ".m4a",
+-      ".m4b",
+-      ".avi",
+-      ".asf",
+-      ".wmv",
+-      ".mkv",
+-      ".mebm",
+-      ".mpg",
+-      ".dat",
+-      ".mpeg",
+-      ".evo",
+-      ".vob",
+-      ".vdr",
+-      ".mod",
+-      ".ts",
+-      ".trp",
+-      ".mts",
+-      ".m2t",
+-      ".m2ts",
+-      ".tod",
+-      ".mp4",
+-      ".m4v",
+-      ".3gp",
+-      ".mov",
+-      ".qt",
+-      ".bmp",
+-      ".jpg",
+-      ".jpeg",
+-      ".gif",
+-      ".tif",
+-      ".png",
+-      ".pls",
+-      ".m3u",
+-      ".wpl",
+-      ".m4b",
+-   };
+-
+-   if(fileName == NULL)
+-   {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", fileName is NULL\n");
+-      return false;
+-   }
+-
+-   string fileStr = fileName;
+-   int i = 0;
+-   int totle = sizeof(extArray)/sizeof(char *);
+-   string extStr = "";
+-   for(i = 0; i < totle; i++)
+-   {
+-      extStr = extArray[i];
+-      if(endWith(fileStr, extStr))
+-      {
+-         return true;
+-      }
+-   }
+-
+-   return false;
+-}
+-
+ const TypeDir *MTPDevice::dirFetchContent(std::string path, int *itemType)
+ {
+     //logmsg("  fun: ", __FUNCTION__, ", line: ", __LINE__, ",path: ", path, ", enter\n");
+@@ -1212,8 +1140,16 @@ int32_t MTPDevice::getFileInfoById(uint32_t id, struct stat *st)
+    criticalLeave1();
+    if(file == NULL)
+    {
+-      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", file is NULL\n");
+-      return -1;
++      logmsg("  fun: ", __FUNCTION__, ", id: ", id, ", file is NULL, fake it\n");
++      st->st_ino = id;
++      st->st_size = 1024;
++      st->st_blocks = 1;
++      st->st_nlink = 1;
++      st->st_mode = S_IFREG | 0644;
++      st->st_mtime = time(NULL);
++      st->st_ctime = st->st_mtime;
++      st->st_atime = st->st_mtime;
++      return 0;
+    }
+ 
+    //fill st with file
+diff --git a/src/simple-mtpfs-mtp-device.h b/src/simple-mtpfs-mtp-device.h
+index d5beb1c..a2964ac 100755
+--- a/src/simple-mtpfs-mtp-device.h
++++ b/src/simple-mtpfs-mtp-device.h
+@@ -96,7 +96,6 @@ public:
+     static bool listDevices(bool verbose, const std::string &dev_file);
+     string& getUUID(){return mUUID;}
+     int32_t getFileInfoById(uint32_t id, struct stat *st);
+-    bool isMediaType(const char *fileName);
+     void criticalEnter1() { m_device_mutex.lock(); }
+     void criticalLeave1() { m_device_mutex.unlock(); }
+ 
+diff --git a/src/simple-mtpfs-util.cpp b/src/simple-mtpfs-util.cpp
+index 07b9a05..0b17bce 100755
+--- a/src/simple-mtpfs-util.cpp
++++ b/src/simple-mtpfs-util.cpp
+@@ -382,5 +382,84 @@ int FreeCoCPath(COCMediaPathInfo *outPath)
+ 
+ bool endWith(const string& str, const string& substr) 
+ {
++   //check the length
++   if(str.length() <= substr.length())
++   {
++      return false;
++   }
++
+    return str.rfind(substr) == (str.length() - substr.length());
+ }
++
++
++bool isMediaType(const char *fileName)
++{
++   const char* extArray[] = 
++   {
++      ".mp3",
++      ".wma",
++      ".aac",
++      ".wav",
++      ".wave",
++      ".flac",
++      ".oga",
++      ".ogg",
++      ".mka",
++      ".m4a",
++      ".m4b",
++      ".avi",
++      ".asf",
++      ".wmv",
++      ".mkv",
++      ".mebm",
++      ".mpg",
++      ".dat",
++      ".mpeg",
++      ".evo",
++      ".vob",
++      ".vdr",
++      ".mod",
++      ".ts",
++      ".trp",
++      ".mts",
++      ".m2t",
++      ".m2ts",
++      ".tod",
++      ".mp4",
++      ".m4v",
++      ".3gp",
++      ".mov",
++      ".qt",
++      ".bmp",
++      ".jpg",
++      ".jpeg",
++      ".gif",
++      ".tif",
++      ".png",
++      ".pls",
++      ".m3u",
++      ".wpl",
++      ".m4b",
++   };
++
++   if(fileName == NULL)
++   {
++      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", fileName is NULL\n");
++      return false;
++   }
++
++   string fileStr = fileName;
++   int i = 0;
++   int total = sizeof(extArray)/sizeof(char *);
++   string extStr = "";
++   for(i = 0; i < total; i++)
++   {
++      extStr = extArray[i];
++      if(endWith(fileStr, extStr))
++      {
++         return true;
++      }
++   }
++
++   return false;
++}
+diff --git a/src/simple-mtpfs-util.h b/src/simple-mtpfs-util.h
+index 4e4f541..e685a6d 100755
+--- a/src/simple-mtpfs-util.h
++++ b/src/simple-mtpfs-util.h
+@@ -80,5 +80,6 @@ typedef struct
+ int GetCoCPath(const char *inPath, COCMediaPathInfo *outPath);
+ int FreeCoCPath(COCMediaPathInfo *outPath);
+ bool endWith(const std::string& str, const std::string& substr);
++bool isMediaType(const char *fileName);
+ 
+ #endif // SIMPLE_MTPFS_UTIL

@@ -1,0 +1,146 @@
+*******************************************************************************
+Date         : 2019-02-15
+Author       : Jing Deng
+Harman International Industries, Incorporated
+
+Description  : This patch is for medialaunch connect MTP bugs. 
+for mmt2020 project, the crash is seen for mtp device in ticket#2633306. 
+so submit the fix as patch for simple-mtpfs.
+ChangeList   : 5342862
+*******************************************************************************
+
+diff --git a/src/simple-mtpfs-db.cpp b/src/simple-mtpfs-db.cpp
+index e494675..cae3781 100755
+--- a/src/simple-mtpfs-db.cpp
++++ b/src/simple-mtpfs-db.cpp
+@@ -75,14 +75,13 @@ SIMPLE_DB::SIMPLE_DB(const string DBName)
+    //get the SMTPFS_DB_PATH by environment 
+    char *dbPath = getenv(SMTPFS_DBPATH_ENV);
+ 
+-   logmsg("SIMPLE_DB, env SMTPFS_DBPATH: ", dbPath, "\n");
+-
+    if(dbPath != NULL)
+    {
+       databaseName = dbPath;
++      logmsg("SIMPLE_DB, env SMTPFS_DBPATH: ", dbPath, "\n");
+    }
+    
+-   logmsg("SIMPLE_DB, real dbbase path: ", databaseName, "\n");
++   //logmsg("SIMPLE_DB, real dbbase path: ", databaseName, "\n");
+ 
+    if(!databaseName.empty())
+    {
+diff --git a/src/simple-mtpfs-mtp-device.cpp b/src/simple-mtpfs-mtp-device.cpp
+index 1d2806a..7ad5d5d 100755
+--- a/src/simple-mtpfs-mtp-device.cpp
++++ b/src/simple-mtpfs-mtp-device.cpp
+@@ -901,23 +901,23 @@ int MTPDevice::filesplitPull(const std::string &src,const std::string &dst,uint3
+    bool isInCache = true;
+    uint32_t fileId = 0;
+    int rval = 0;
+-	const std::string src_basename(smtpfs_basename(src));
+-	const std::string src_dirname(smtpfs_dirname(src));
+-	const TypeDir *dir_parent = dirFetchContentFromCache(src_dirname);
+-	const TypeFile *file_to_fetch = dir_parent ? dir_parent->file(src_basename) : nullptr;
+-	if (!dir_parent) {
+-		logmsg("filesplitPull, dir_parent Can not fetch '", src, "'.\n");
+-		isInCache = false;
+-	}
++   const std::string src_basename(smtpfs_basename(src));
++   const std::string src_dirname(smtpfs_dirname(src));
++   const TypeDir *dir_parent = dirFetchContentFromCache(src_dirname);
++   const TypeFile *file_to_fetch = dir_parent ? dir_parent->file(src_basename) : nullptr;
++   if (!dir_parent) {
++      logmsg("filesplitPull, dir_parent Can not fetch '", src, "'.\n");
++      isInCache = false;
++   }
+ 
+-	if (!file_to_fetch) {
+-		logmsg("filesplitPull, file_to_fetch No such file '", src, "'.\n");
+-		isInCache = false;
+-	}
++   if (!file_to_fetch) {
++      logmsg("filesplitPull, file_to_fetch No such file '", src, "'.\n");
++      isInCache = false;
++   }
+ 
+    uint32_t readlen = 0;
+    unsigned char* tmpbuf = NULL;
+-   
++
+    if(isInCache == true)
+    {
+       fileId = file_to_fetch->id();
+@@ -934,9 +934,9 @@ int MTPDevice::filesplitPull(const std::string &src,const std::string &dst,uint3
+    }
+ 
+    //logmsg(" read file: ", src, "\n");
+-   
+-	struct timeval startTime, endTime;
+-	unsigned long diffTime;
++
++   struct timeval startTime, endTime;
++   unsigned long diffTime;
+ 
+    //logmsg(" enter LIBMTP_GetPartialObject, fileId: ", fileId, "\n");
+    gettimeofday(&startTime, NULL);
+@@ -944,36 +944,34 @@ int MTPDevice::filesplitPull(const std::string &src,const std::string &dst,uint3
+    rval = LIBMTP_GetPartialObject(m_device,fileId,offset,size,&tmpbuf,&readlen);
+    criticalLeave1();
+    gettimeofday(&endTime, NULL);
+-   
+-    diffTime = (endTime.tv_sec - startTime.tv_sec);
+-	if(diffTime >= 2)
+-	{
+-		logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", diffTIme: ", diffTime, ".\n");
+-		logmsg(" read file: ", src, ", fileid: ", fileId, "\n");
+-	}
+-			 
++   diffTime = (endTime.tv_sec - startTime.tv_sec);
++   if(diffTime >= 2)
++   {
++      logmsg("  fun: ", __FUNCTION__, "  line: ", __LINE__, ", diffTIme: ", diffTime, ".\n");
++      logmsg(" read file: ", src, ", fileid: ", fileId, "\n");
++   }
++      
+    //logmsg(" exit LIBMTP_GetPartialObject, fileId: ", fileId, "\n");
+ 
+-   //logmsg("LIBMTP_GetPartialObject ", ",rval: ", rval, ",readlen: ", readlen, "\n");
+-	if(tmpbuf)
+-	{
++   //logmsg("LIBMTP_GetPartialObject ", ",rval: ", rval, ",readlen: ", readlen, ", size: ", size, "\n");
++   if(!rval && tmpbuf && (readlen <= size) && buf)
++   {
+       memcpy(buf,tmpbuf,readlen);
+-      
+-		free(tmpbuf);
+-		tmpbuf = NULL;
+-	}
+-
+-	//criticalLeave();
+-	if (rval != 0) {
+-		logmsg("Could not fetch file '", src, "'.failed\n");
++      free(tmpbuf);
++      tmpbuf = NULL;
++   }
+ 
+-		LIBMTP_Dump_Errorstack(m_device);
+-		LIBMTP_Clear_Errorstack(m_device);
+-		return -EAGAIN;
+-	}
+-	//logmsg("File fetched '", src, "'. ok\n");
+-	return readlen;
++   //criticalLeave();
++   if ((rval != 0) || (readlen > size)) {
++      logmsg("Could not fetch file '", src, "'.failed\n");
++      logmsg("LIBMTP_GetPartialObject ", ",rval: ", rval, ",readlen: ", readlen, ", size: ", size, "\n");
+ 
++      LIBMTP_Dump_Errorstack(m_device);
++      LIBMTP_Clear_Errorstack(m_device);
++      return -EAGAIN;
++   }
++   //logmsg("File fetched '", src, "'. ok\n");
++   return readlen;
+ }
+ 
+ int MTPDevice::filePull(const std::string &src, const std::string &dst)

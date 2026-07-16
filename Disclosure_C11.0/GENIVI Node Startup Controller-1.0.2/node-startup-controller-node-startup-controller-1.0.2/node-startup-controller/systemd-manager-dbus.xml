@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<node name="/org/freedesktop/systemd1">
+  <interface name="org.freedesktop.systemd1.Manager">
+    <method name="GetUnit">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="unit" type="o" direction="out"/>
+    </method>
+
+    <method name="StartUnit">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="mode" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+
+    <method name="StopUnit">
+      <arg name="name" type="s" direction="in"/>
+      <arg name="mode" type="s" direction="in"/>
+      <arg name="job" type="o" direction="out"/>
+    </method>
+
+    <method name="ListJobs">
+      <arg name="jobs" type="a(usssoo)" direction="out"/>
+    </method>
+
+    <method name="Subscribe"/>
+
+    <method name="Unsubscribe"/>
+
+    <signal name="JobRemoved">
+      <arg name="id" type="u"/>
+      <arg name="job" type="o"/>
+      <arg name="unit" type="s"/>
+      <arg name="result" type="s"/>
+    </signal>
+  </interface>
+</node>

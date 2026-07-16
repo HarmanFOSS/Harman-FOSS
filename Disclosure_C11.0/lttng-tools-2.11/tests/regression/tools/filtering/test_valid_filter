@@ -1,0 +1,1481 @@
+#!/bin/bash
+#
+# Copyright (C) - 2012 Christian Babeux <christian.babeux@efficios.com>
+#
+# This program is free software; you can redistribute it and/or modify it
+# under the terms of the GNU General Public License, version 2 only, as
+# published by the Free Software Foundation.
+#
+# This program is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+# more details.
+#
+# You should have received a copy of the GNU General Public License along with
+# this program; if not, write to the Free Software Foundation, Inc., 51
+# Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+
+TEST_DESC="Filtering - Valid filters"
+
+CURDIR=$(dirname $0)/
+TESTDIR=$CURDIR/../../..
+STATS_BIN="$TESTDIR/utils/babelstats.pl"
+SESSION_NAME="valid_filter"
+NR_ITER=100
+NUM_GLOBAL_TESTS=2
+NUM_UST_TESTS=1110
+NUM_KERNEL_TESTS=1044
+NUM_TESTS=$(($NUM_UST_TESTS+$NUM_KERNEL_TESTS+$NUM_GLOBAL_TESTS))
+
+source $TESTDIR/utils/utils.sh
+
+function enable_lttng_event_filter()
+{
+	domain="$1"
+	sess_name="$2"
+	event_name="$3"
+	filter="$4"
+
+	$TESTDIR/../src/bin/lttng/$LTTNG_BIN enable-event $event_name \
+			-s $sess_name $domain --filter "$filter" 2>&1 >/dev/null
+	$TESTDIR/../src/bin/lttng/$LTTNG_BIN add-context \
+			-s $sess_name $domain -t procname 2>&1 >/dev/null
+
+	ok $? "Enable lttng event with filtering"
+}
+
+function run_ust
+{
+	./$CURDIR/$BIN_NAME $NR_ITER >/dev/null 2>&1
+}
+
+function run_ust_str
+{
+	$TESTDIR/utils/testapp/gen-ust-nevents-str/gen-ust-nevents-str $NR_ITER \
+		hypothec \
+		hypotheca \
+		hypothecary \
+		hypothecate \
+		hypothecation \
+		hypothecator \
+		hypothecium \
+		hypothenar \
+		hypothenuse \
+		hypothermal \
+		hypothermia \
+		hypothermic \
+		hypotheses \
+		hypothesis \
+		hypothesise \
+		hypothesised \
+		hypothesises \
+		hypothesize \
+		hypothesizing \
+		hypothetic \
+		electrothermic \
+		endothermic \
+		exothermic \
+		geothermic \
+		apothecary \
+		hypothecary \
+		peccary \
+		scary \
+		actinomycosis \
+		adenohypophysis \
+		adiposis \
+		emesis \
+		emphasis \
+		conformal \
+		coseismal \
+		decimal \
+		dermal
+}
+
+function run_kernel
+{
+	# Trigger the event for 100 iterations
+	echo -n "100" > /proc/lttng-test-filter-event
+}
+
+function test_valid_filter
+{
+	domain_name="$1"
+	domain="$2"
+	event_name="$3"
+	filter="$4"
+	validator="$5"
+
+	diag "Test valid $domain_name filter: $filter"
+
+	trace_path=$(mktemp -d)
+
+	# Create session
+	create_lttng_session_ok $SESSION_NAME $trace_path
+
+	# Enable filter
+	enable_lttng_event_filter $domain $SESSION_NAME "$event_name" "$filter"
+
+	# Trace apps
+	start_lttng_tracing_ok $SESSION_NAME
+	run_$domain_name
+	stop_lttng_tracing_ok $SESSION_NAME
+
+	# Destroy session
+	destroy_lttng_session_ok $SESSION_NAME
+
+	stats=`babeltrace $trace_path | $STATS_BIN --tracepoint $event_name`
+
+	rm -rf $trace_path
+
+	$validator "$stats"
+
+	ok $? "Validate trace filter output"
+
+	rm -rf $trace_path
+}
+
+function validate_min_max
+{
+	stats="$1"
+	field=$2
+	expected_min=$3
+	expected_max=$4
+
+	echo $stats | grep -q "$field $expected_min $expected_max"
+
+	return $?
+}
+
+function validator_intfield
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "1" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "intfield2" "0x1" "0x63"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "longfield" "1" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "netintfield" "1" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "netintfieldhex" "0x1" "0x63"
+	status=$(($status|$?))
+
+	if [ $KERNEL_CHECK -eq 0 ]; then
+		validate_min_max "$stats" "floatfield" "2222" "2222"
+		status=$(($status|$?))
+
+		validate_min_max "$stats" "doublefield" "2" "2"
+		status=$(($status|$?))
+	fi
+
+	return $status
+}
+
+function validator_intfield_gt
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "2" "99"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_has_no_event
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "99"
+	status=$(($status|$?))
+
+	if [ $status -eq 0 ]; then
+		return 1
+	else
+		return 0
+	fi
+}
+
+function validator_str_has_no_event
+{
+	validator_has_no_event "$1"
+}
+
+function validator_has_events
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "99"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_str_has_events
+{
+	stats="$1"
+	status=0
+
+	echo $stats | grep -q str
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_stringfield_has_events
+{
+	stats="$1"
+	status=0
+
+	echo $stats | grep -q stringfield
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_ge
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "1" "99"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_lt
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "1"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_le
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "2"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_eq
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "1" "1"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_ne
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "98"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_not
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "0"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_gt_and_longfield_gt
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "43" "99"
+	status=$(($status|$?))
+	validate_min_max "$stats" "longfield" "43" "99"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_ge_and_longfield_le
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "42" "42"
+	status=$(($status|$?))
+	validate_min_max "$stats" "longfield" "42" "42"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_intfield_lt_or_longfield_gt
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "99"
+	status=$(($status|$?))
+	validate_min_max "$stats" "longfield" "0" "99"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_mixed_str_or_int_and_int
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "34" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "stringfield" "\"test\"" "\"test\""
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_mixed_int_double
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "42"
+	status=$(($status|$?))
+
+	return $status
+}
+
+function validator_true_statement
+{
+	stats="$1"
+	status=0
+
+	validate_min_max "$stats" "intfield" "0" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "intfield2" "0x0" "0x63"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "longfield" "0" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "netintfield" "0" "99"
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "netintfieldhex" "0x0" "0x63"
+	status=$(($status|$?))
+
+	if [ $KERNEL_CHECK -eq 0 ]; then
+		validate_min_max "$stats" "floatfield" "2222" "2222"
+		status=$(($status|$?))
+
+		validate_min_max "$stats" "doublefield" "2" "2"
+		status=$(($status|$?))
+	fi
+
+	validate_min_max "$stats" "stringfield" "\"test\"" "\"test\""
+	status=$(($status|$?))
+
+	validate_min_max "$stats" "stringfield2" ""\*"" ""\*""
+	status=$(($status|$?))
+
+	return $status
+}
+
+plan_tests $NUM_TESTS
+
+print_test_banner "$TEST_DESC"
+
+issue_356_filter="intfield > 0 && intfield > 1 && "
+issue_356_filter+="intfield > 2 && intfield > 3 && "
+issue_356_filter+="intfield > 4 && intfield > 5 && "
+issue_356_filter+="intfield > 6 && intfield > 7 && "
+issue_356_filter+="intfield > 8 || intfield > 0"
+
+start_lttng_sessiond
+
+### UST TESTS
+
+BIN_NAME="gen-ust-events"
+
+KIRK_KRAUSS_TESTS=(
+	# the tests below were written by Kirk Krauss in this article:
+	# http://www.drdobbs.com/architecture-and-design/matching-wildcards-an-empirical-way-to-t/240169123
+
+	str_has_events
+	'"abcccd" == "*ccd"'
+
+	str_has_events
+	'"mississipissippi" == "*issip*ss*"'
+
+	str_has_no_event
+	'"xxxx\*zzzzzzzzy\*f" == "xxxx*zzy*fffff"'
+
+	str_has_events
+	'"xxxx\*zzzzzzzzy\*f" == "xxx*zzy*f"'
+
+	str_has_no_event
+	'"xxxxzzzzzzzzyf" == "xxxx*zzy*fffff"'
+
+	str_has_events
+	'"xxxxzzzzzzzzyf" == "xxxx*zzy*f"'
+
+	str_has_events
+	'"xyxyxyzyxyz" == "xy*z*xyz"'
+
+	str_has_events
+	'"mississippi" == "*sip*"'
+
+	str_has_events
+	'"xyxyxyxyz" == "xy*xyz"'
+
+	str_has_events
+	'"mississippi" == "mi*sip*"'
+
+	str_has_events
+	'"ababac" == "*abac*"'
+
+	str_has_events
+	'"ababac" == "*abac*"'
+
+	str_has_events
+	'"aaazz" == "a*zz*"'
+
+	str_has_no_event
+	'"a12b12" == "*12*23"'
+
+	str_has_no_event
+	'"a12b12" == "a12b"'
+
+	str_has_events
+	'"a12b12" == "*12*12*"'
+
+	str_has_events
+	'"\*" == "*"'
+
+	str_has_events
+	'"a\*abab" == "a*b"'
+
+	str_has_events
+	'"a\*r" == "a*"'
+
+	str_has_no_event
+	'"a\*ar" == "a*aar"'
+
+	str_has_events
+	'"XYXYXYZYXYz" == "XY*Z*XYz"'
+
+	str_has_events
+	'"missisSIPpi" == "*SIP*"'
+
+	str_has_events
+	'"mississipPI" == "*issip*PI"'
+
+	str_has_events
+	'"xyxyxyxyz" == "xy*xyz"'
+
+	str_has_events
+	'"miSsissippi" == "mi*sip*"'
+
+	str_has_no_event
+	'"miSsissippi" == "mi*Sip*"'
+
+	str_has_events
+	'"abAbac" == "*Abac*"'
+
+	str_has_events
+	'"abAbac" == "*Abac*"'
+
+	str_has_events
+	'"aAazz" == "a*zz*"'
+
+	str_has_no_event
+	'"A12b12" == "*12*23"'
+
+	str_has_events
+	'"a12B12" == "*12*12*"'
+
+	str_has_events
+	'"oWn" == "*oWn*"'
+
+	str_has_events
+	'"bLah" == "bLah"'
+
+	str_has_no_event
+	'"bLah" == "bLaH"'
+
+	str_has_events
+	'"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaab" == "a*a*a*a*a*a*aa*aaa*a*a*b"'
+
+	str_has_events
+	'"abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab" == "*a*b*ba*ca*a*aa*aaa*fa*ga*b*"'
+
+	str_has_no_event
+	'"abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab" == "*a*b*ba*ca*a*x*aaa*fa*ga*b*"'
+
+	str_has_no_event
+	'"abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab" == "*a*b*ba*ca*aaaa*fa*ga*gggg*b*"'
+
+	str_has_events
+	'"abababababababababababababababababababaacacacacacacacadaeafagahaiajakalaaaaaaaaaaaaaaaaaffafagaagggagaaaaaaaab" == "*a*b*ba*ca*aaaa*fa*ga*ggg*b*"'
+
+	str_has_events
+	'"aaabbaabbaab" == "*aabbaa*a*"'
+
+	str_has_events
+	'"a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*a\*" == "a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*"'
+
+	str_has_events
+	'"aaaaaaaaaaaaaaaaa" == "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*"'
+
+	str_has_no_event
+	'"aaaaaaaaaaaaaaaa" == "*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*a*"'
+
+	str_has_no_event
+	'"abc\*abcd\*abcde\*abcdef\*abcdefg\*abcdefgh\*abcdefghi\*abcdefghij\*abcdefghijk\*abcdefghijkl\*abcdefghijklm\*abcdefghijklmn" == "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*"'
+
+	str_has_events
+	'"abc\*abcd\*abcde\*abcdef\*abcdefg\*abcdefgh\*abcdefghi\*abcdefghij\*abcdefghijk\*abcdefghijkl\*abcdefghijklm\*abcdefghijklmn" == "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*"'
+
+	str_has_no_event
+	'"abc\*abcd\*abcd\*abc\*abcd" == "abc*abc*abc*abc*abc"'
+
+	str_has_events
+	'"abc\*abc\*abc\*abc\*abc\*abc\*abc\*abc\*abc\*abc\*abcd" == "abc*abc*abc*abc*abc*abc*abc*abc*abc*abc*abcd"'
+)
+
+# Set IFS to newline to facilitate array declaration
+OLDIFS="$IFS"
+IFS=$'\n'
+UST_FILTERS=(
+	intfield
+	"intfield"
+
+	intfield_gt
+	"intfield > 1"
+
+	intfield_ge
+	"intfield >= 1"
+
+	intfield_lt
+	"intfield < 2"
+
+	intfield_le
+	"intfield <= 2"
+
+	intfield_eq
+	"intfield == 1"
+
+	intfield_ne
+	"intfield != 99"
+
+	intfield_not
+	"!intfield"
+
+	intfield
+	"-intfield"
+
+	intfield
+	"--intfield"
+
+	intfield
+	"+intfield"
+
+	intfield
+	"++intfield"
+
+	intfield_gt_and_longfield_gt
+	"intfield > 1 && longfield > 42"
+
+	intfield_ge_and_longfield_le
+	"intfield >= 42 && longfield <= 42"
+
+	intfield_lt_or_longfield_gt
+	"intfield < 1 || longfield > 98"
+
+	mixed_str_or_int_and_int
+	"(stringfield == \"test\" || intfield != 10) && intfield > 33"
+
+	mixed_int_double
+	"intfield < 42.4242424242"
+
+	# Issue #342
+	true_statement
+	"\"test\" == \"test\""
+
+	true_statement
+	"stringfield == \"test\""
+
+	true_statement
+	"stringfield == \"t*\""
+
+	true_statement
+	"stringfield == \"*\""
+
+	# Issue 356
+	intfield
+	$issue_356_filter
+
+	true_statement
+	"1&1"
+
+	true_statement
+	"0|1"
+
+	true_statement
+	"0^1"
+
+	true_statement
+	"seqfield4[1]==2"
+
+	true_statement
+	"arrfield1[1]==2"
+
+	true_statement
+	"arrfield1[1]==2"
+
+	true_statement
+	"arrfield3[1]==2"
+
+	true_statement
+	"seqfield3[1]==2"
+
+	true_statement
+	"1 | (1 | (1 | 1))"
+
+	true_statement
+	"1 >= (1 >= (1 >= 1))"
+
+	true_statement
+	"(0x101 & 0x100) == 0x100"
+
+	true_statement
+	"(0x101 | 0x10100) == 0x10101"
+
+	true_statement
+	"(0xF00F0F ^ 0xFF0F00) == 0x0F000F"
+
+	true_statement
+	"(1 << 1) == 2"
+
+	true_statement
+	"(4 >> 1) == 2"
+
+	true_statement
+	"(1 << 8) == 256"
+
+	true_statement
+	"(262144 >> 16) == 4"
+
+	true_statement
+	"(~0 & 0xffff) == 0xffff"
+
+	true_statement
+	"(~0 & 0xffffffff) == 0xffffffff"
+
+	true_statement
+	"(~0 & 0xffffffffffffffff) == 0xffffffffffffffff"
+
+	true_statement
+	"-1==~0"
+
+	true_statement	# unsigned bitwise ops
+	"~0>>4==0x0fffffffffffffff"
+
+	has_no_event
+	"1<<-1"
+
+	has_no_event
+	"1<<10000"
+
+	true_statement	# comparator is signed, shift is unsigned
+	"(1<<63) < 0"
+
+	true_statement
+	"(1<<2!=4)==0"	# operator priority: shift before equality
+
+	true_statement
+	"1&3==1"	# operator priority: masks before equality
+
+	true_statement
+	"(3|1==3)==1"	# operator priority: masks before equality
+
+	true_statement
+	"(2^1==3)==1"	# operator priority: masks before equality
+
+	true_statement
+	"(1 << 32) == 4294967296"
+
+	true_statement
+	"(1 << 63) == 9223372036854775808"
+
+	true_statement
+	"(arrfield1[2] & 1) == 1"
+
+	true_statement
+	"(arrfield1[2] | 0x111000) == 0x111003"
+
+	true_statement
+	"(arrfield1[0] | arrfield1[1] | arrfield1[2]) == 0x3"
+
+	true_statement
+	"(seqfield4[2] & 1) == 1"
+
+	true_statement
+	"(seqfield4[2] | 0x111000) == 0x111003"
+
+	true_statement
+	"intfield < 0xDEADBEEF"
+
+	intfield_lt
+	"intfield < 0x2"
+
+	intfield_lt
+	"intfield < 02"
+
+	true_statement
+	"stringfield2 == \"\\\*\""
+
+	true_statement
+	"1.0 || intfield || 1.0"
+
+	intfield_gt
+	"1 < intfield"
+
+	has_no_event
+	"\$ctx.vtid == 0"
+
+	has_events
+	"\$ctx.vtid != 0"
+
+	has_no_event
+	"0 == \$ctx.vtid"
+
+	has_events
+	"0 != \$ctx.vtid"
+
+	has_no_event
+	"\$ctx.vpid == 0"
+
+	has_events
+	"\$ctx.vpid != 0"
+
+	has_no_event
+	"0 == \$ctx.vpid"
+
+	has_events
+	"0 != \$ctx.vpid"
+
+	has_no_event
+	"\$ctx.procname != \"$BIN_NAME\""
+
+	has_events
+	"\$ctx.procname == \"$BIN_NAME\""
+
+	has_no_event
+	"\"$BIN_NAME\" != \$ctx.procname"
+
+	has_events
+	"\"$BIN_NAME\" == \$ctx.procname"
+
+	has_no_event
+	"\$ctx.procname != \"$BIN_NAME*\""
+
+	has_events
+	"\$ctx.procname == \"$BIN_NAME*\""
+
+	has_no_event
+	"\"$BIN_NAME*\" != \$ctx.procname"
+
+	has_events
+	"\"$BIN_NAME*\" == \$ctx.procname"
+
+	has_no_event
+	"\$ctx.procname != \"*\""
+
+	has_events
+	"\$ctx.procname == \"*\""
+
+	has_no_event
+	"\"*\" != \$ctx.procname"
+
+	has_events
+	"\"*\" == \$ctx.procname"
+
+	has_no_event
+	"!a.f.d"
+
+	has_no_event
+	"a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a"
+
+	has_no_event
+	"\$ctx.vtid.blah == 0"
+
+	has_no_event
+	"asdf.asdfsd.sadf < 4"
+
+	has_no_event
+	"0 == \$ctx.vtid.blah"
+
+	END
+)
+
+UST_STR_FILTERS=(
+	str_has_events
+	'str == "hypothecary"'
+
+	str_has_events
+	'"hypothecary" == str'
+
+	str_has_events
+	'str != "hypothecary"'
+
+	str_has_events
+	'"hypothecary" != str'
+
+	str_has_events
+	'str == "*cary"'
+
+	str_has_events
+	'"*cary" == str'
+
+	str_has_events
+	'str != "*cary"'
+
+	str_has_events
+	'"*cary" != str'
+
+	str_has_events
+	'str == "hypo*"'
+
+	str_has_events
+	'"hypo*" == str'
+
+	str_has_events
+	'str != "hypo*"'
+
+	str_has_events
+	'"hypo*" != str'
+
+	str_has_events
+	'str == "*the*"'
+
+	str_has_events
+	'"*the*" == str'
+
+	str_has_events
+	'str != "*the*"'
+
+	str_has_events
+	'"*the*" != str'
+
+	str_has_events
+	'str == "**"'
+
+	str_has_events
+	'"**" == str'
+
+	str_has_no_event
+	'str != "**"'
+
+	str_has_no_event
+	'"**" != str'
+
+	str_has_events
+	'str == "sc*"'
+
+	str_has_events
+	'"sc*" == str'
+
+	str_has_events
+	'str != "sc*"'
+
+	str_has_events
+	'"sc*" != str'
+
+	str_has_events
+	'str == "de*al"'
+
+	str_has_events
+	'"de*al" == str'
+
+	str_has_events
+	'str != "de*al"'
+
+	str_has_events
+	'"de*al" != str'
+
+	str_has_events
+	'str == "*po*siz*"'
+
+	str_has_events
+	'"*po*siz*" == str'
+
+	str_has_events
+	'str != "*po*siz*"'
+
+	str_has_events
+	'"*po*siz*" != str'
+
+	str_has_events
+	'str == "*po***siz*"'
+
+	str_has_events
+	'"*po***siz*" == str'
+
+	str_has_events
+	'str != "*po***siz*"'
+
+	str_has_events
+	'"*po***siz*" != str'
+
+	str_has_no_event
+	'str == "*po*\**siz*"'
+
+	str_has_no_event
+	'"*po*\**siz*" == str'
+
+	str_has_no_event
+	'str == "*zulu*"'
+
+	str_has_no_event
+	'"*zulu*" == str'
+
+	str_has_no_event
+	'str == "8*"'
+
+	str_has_no_event
+	'"8*" == str'
+
+	str_has_no_event
+	'str == "*8"'
+
+	str_has_no_event
+	'"*8" == str'
+
+	str_has_no_event
+	'str == "de\*al"'
+
+	str_has_no_event
+	'"de\*al" == str'
+
+	str_has_events
+	'"salut*" == "salut vous"'
+
+	str_has_events
+	'"salut*" == "salut vous*"'
+
+	str_has_events
+	'"salut vous*" == "salut*"'
+
+	${KIRK_KRAUSS_TESTS[@]}
+
+	END
+)
+
+if [ ! -x "$CURDIR/$BIN_NAME" ]; then
+	BAIL_OUT "No UST nevents binary detected."
+fi
+
+IFS="$OLDIFS"
+
+diag "Test UST valid filters"
+
+KERNEL_CHECK=0
+i=0
+while true; do
+	validator="${UST_FILTERS[$i]}"
+
+	if [ "$validator" = END ]; then
+		break
+	fi
+
+	filter="${UST_FILTERS[$(( i + 1 ))]}"
+	test_valid_filter ust -u "tp:tptest" "$filter" "validator_$validator"
+
+	if [ $? -eq 1 ]; then
+		stop_lttng_sessiond
+		exit 1
+	fi
+
+	i=$(( i + 2 ))
+done
+
+i=0
+while true; do
+	validator="${UST_STR_FILTERS[$i]}"
+
+	if [ "$validator" = END ]; then
+		break
+	fi
+
+	filter="${UST_STR_FILTERS[$(( i + 1 ))]}"
+	test_valid_filter ust_str -u "tp:the_string" "$filter" "validator_$validator"
+
+	if [ $? -eq 1 ]; then
+		stop_lttng_sessiond
+		exit 1
+	fi
+
+	i=$(( i + 2 ))
+done
+
+### KERNEL TESTS
+
+BIN_NAME="test_valid_filt"	# Current script name truncated by kernel
+
+# One to one mapping between filters and validators
+# Set IFS to newline to facilitate array declaration
+OLDIFS="$IFS"
+IFS=$'\n'
+KERNEL_FILTERS=(
+	intfield
+	"intfield"
+
+	intfield_gt
+	"intfield > 1"
+
+	intfield_ge
+	"intfield >= 1"
+
+	intfield_lt
+	"intfield < 2"
+
+	intfield_le
+	"intfield <= 2"
+
+	intfield_eq
+	"intfield == 1"
+
+	intfield_ne
+	"intfield != 99"
+
+	intfield_not
+	"!intfield"
+
+	intfield
+	"-intfield"
+
+	intfield
+	"--intfield"
+
+	intfield
+	"+intfield"
+
+	intfield
+	"++intfield"
+
+	intfield_gt_and_longfield_gt
+	"intfield > 1 && longfield > 42"
+
+	intfield_ge_and_longfield_le
+	"intfield >= 42 && longfield <= 42"
+
+	intfield_lt_or_longfield_gt
+	"intfield < 1 || longfield > 98"
+
+	mixed_str_or_int_and_int
+	"(stringfield == \"test\" || intfield != 10) && intfield > 33"
+
+	has_no_event
+	"intfield < 42.4242424242"
+
+	true_statement
+	"\"test\" == \"test\""
+
+	true_statement
+	"stringfield == \"test\""
+
+	true_statement
+	"stringfield == \"t*\""
+
+	true_statement
+	"stringfield == \"*\""
+
+	intfield
+	$issue_356_filter
+
+	true_statement
+	"1&1"
+
+	true_statement
+	"0|1"
+
+	true_statement
+	"0^1"
+
+	true_statement
+	"seqfield4[1]==2"
+
+	true_statement
+	"arrfield1[1]==2"
+
+	true_statement
+	"arrfield1[1]==2"
+
+	true_statement
+	"arrfield3[1]==2"
+
+	true_statement
+	"seqfield3[1]==2"
+
+	true_statement
+	"1 | (1 | (1 | 1))"
+
+	true_statement
+	"1 >= (1 >= (1 >= 1))"
+
+	true_statement
+	"(0x101 & 0x100) == 0x100"
+
+	true_statement
+	"(0x101 | 0x10100) == 0x10101"
+
+	true_statement
+	"(0xF00F0F ^ 0xFF0F00) == 0x0F000F"
+
+	true_statement
+	"(1 << 1) == 2"
+
+	true_statement
+	"(4 >> 1) == 2"
+
+	true_statement
+	"(1 << 8) == 256"
+
+	true_statement
+	"(262144 >> 16) == 4"
+
+	true_statement
+	"(~0 & 0xffff) == 0xffff"
+
+	true_statement
+	"(~0 & 0xffffffff) == 0xffffffff"
+
+	true_statement
+	"(~0 & 0xffffffffffffffff) == 0xffffffffffffffff"
+
+	true_statement
+	"-1==~0"
+
+	true_statement	# unsigned bitwise ops
+	"~0>>4==0x0fffffffffffffff"
+
+	has_no_event
+	"1<<-1"
+
+	has_no_event
+	"1<<10000"
+
+	true_statement	# comparator is signed, shift is unsigned
+	"(1<<63) < 0"
+
+	true_statement
+	"(1<<2!=4)==0"	# operator priority: shift before equality
+
+	true_statement
+	"1&3==1"	# operator priority: masks before equality
+
+	true_statement
+	"(3|1==3)==1"	# operator priority: masks before equality
+
+	true_statement
+	"(2^1==3)==1"	# operator priority: masks before equality
+
+	true_statement
+	"(1 << 32) == 4294967296"
+
+	true_statement
+	"(1 << 63) == 9223372036854775808"
+
+	true_statement
+	"(arrfield1[2] & 1) == 1"
+
+	true_statement
+	"(arrfield1[2] | 0x111000) == 0x111003"
+
+	true_statement
+	"(arrfield1[0] | arrfield1[1] | arrfield1[2]) == 0x3"
+
+	true_statement
+	"(seqfield4[2] & 1) == 1"
+
+	true_statement
+	"(seqfield4[2] | 0x111000) == 0x111003"
+
+	true_statement
+	"intfield < 0xDEADBEEF"
+
+	intfield_lt
+	"intfield < 0x2"
+
+	intfield_lt
+	"intfield < 02"
+
+	true_statement
+	"stringfield2 == \"\\\*\""
+
+	has_no_event
+	"1.0 || intfield || 1.0"
+
+	intfield_gt
+	"1 < intfield"
+
+	has_no_event
+	"\$ctx.vtid == 0"
+
+	has_events
+	"\$ctx.vtid != 0"
+
+	has_no_event
+	"0 == \$ctx.vtid"
+
+	has_events
+	"0 != \$ctx.vtid"
+
+	has_no_event
+	"\$ctx.vpid == 0"
+
+	has_events
+	"\$ctx.vpid != 0"
+
+	has_no_event
+	"0 == \$ctx.vpid"
+
+	has_events
+	"0 != \$ctx.vpid"
+
+	has_no_event
+	"\$ctx.procname != \"$BIN_NAME\""
+
+	has_events
+	"\$ctx.procname == \"$BIN_NAME\""
+
+	has_no_event
+	"\"$BIN_NAME\" != \$ctx.procname"
+
+	has_events
+	"\"$BIN_NAME\" == \$ctx.procname"
+
+	has_no_event
+	"\$ctx.procname != \"$BIN_NAME*\""
+
+	has_events
+	"\$ctx.procname == \"$BIN_NAME*\""
+
+	has_no_event
+	"\"$BIN_NAME*\" != \$ctx.procname"
+
+	has_events
+	"\"$BIN_NAME*\" == \$ctx.procname"
+
+	has_no_event
+	"\$ctx.procname != \"*\""
+
+	has_events
+	"\$ctx.procname == \"*\""
+
+	has_no_event
+	"\"*\" != \$ctx.procname"
+
+	has_events
+	"\"*\" == \$ctx.procname"
+
+	has_no_event
+	"!a.f.d"
+
+	has_no_event
+	"a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a.a"
+
+	has_no_event
+	"\$ctx.vtid.blah == 0"
+
+	has_no_event
+	"asdf.asdfsd.sadf < 4"
+
+	has_no_event
+	"0 == \$ctx.vtid.blah"
+
+	stringfield_has_events
+	'stringfield == "test"'
+
+	stringfield_has_events
+	'"test" == stringfield'
+
+	has_no_event
+	'stringfield != "test"'
+
+	has_no_event
+	'"test" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "*st"'
+
+	stringfield_has_events
+	'"*st" == stringfield'
+
+	has_no_event
+	'stringfield != "*st"'
+
+	has_no_event
+	'"*st" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "te*"'
+
+	stringfield_has_events
+	'"te*" == stringfield'
+
+	has_no_event
+	'stringfield != "te*"'
+
+	has_no_event
+	'"te*" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "te*t"'
+
+	stringfield_has_events
+	'"te*t" == stringfield'
+
+	has_no_event
+	'stringfield != "te*t"'
+
+	has_no_event
+	'"te*t" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "tes*t"'
+
+	stringfield_has_events
+	'"tes*t" == stringfield'
+
+	has_no_event
+	'stringfield != "tes*t"'
+
+	has_no_event
+	'"tes*t" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "*test"'
+
+	stringfield_has_events
+	'"*test" == stringfield'
+
+	has_no_event
+	'stringfield != "*test"'
+
+	has_no_event
+	'"*test" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "test*"'
+
+	stringfield_has_events
+	'"test*" == stringfield'
+
+	has_no_event
+	'stringfield != "test*"'
+
+	has_no_event
+	'"test*" != stringfield'
+
+	stringfield_has_events
+	'stringfield == "*"'
+
+	stringfield_has_events
+	'"*" == stringfield'
+
+	has_no_event
+	'stringfield != "*"'
+
+	has_no_event
+	'"*" != stringfield'
+
+	has_no_event
+	'stringfield == "test*2"'
+
+	has_no_event
+	'stringfield == "2*test"'
+
+	has_no_event
+	'stringfield == "te\*st"'
+
+	has_no_event
+	'stringfield == "te*ts"'
+
+	has_no_event
+	'stringfield == "*\*test"'
+
+	has_no_event
+	'stringfield == "test\*"'
+
+	${KIRK_KRAUSS_TESTS[@]}
+
+	END
+)
+
+IFS=$OLDIFS
+
+if [ "$(id -u)" == "0" ]; then
+	isroot=1
+else
+	isroot=0
+fi
+
+skip $isroot "Root access is needed. Skipping all kernel valid filter tests." $NUM_KERNEL_TESTS ||
+{
+	diag "Test kernel valid filters"
+
+	KERNEL_CHECK=1
+	modprobe lttng-test
+
+	i=0
+	while true; do
+		validator="${KERNEL_FILTERS[$i]}"
+
+		if [ "$validator" = END ]; then
+			break
+		fi
+
+		filter="${KERNEL_FILTERS[$(( i + 1 ))]}"
+		test_valid_filter kernel -k "lttng_test_filter_event" "$filter" "validator_$validator"
+
+		if [ $? -eq 1 ]; then
+			stop_lttng_sessiond
+			exit 1
+		fi
+
+		i=$(( i + 2 ))
+	done
+
+	rmmod lttng-test
+}
+
+stop_lttng_sessiond
