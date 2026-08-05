@@ -1,0 +1,3745 @@
+*******************************************************************************
+Date         : 2019-12-10
+Author       : Xiaojun Zou
+Harman International Industries, Incorporated
+
+Description  : This patch is used for new solution of syncing MTP devices
+ChangeList   : 5483541
+*******************************************************************************
+
+diff --git a/src/makefile.am b/src/makefile.am
+index 6753158..e916609 100755
+--- a/src/makefile.am
++++ b/src/makefile.am
+@@ -26,4 +26,6 @@ simple_mtpfs_SOURCES  =                 \
+ 	simple-mtpfs-type-file.cpp      \
+ 	simple-mtpfs-type-tmp-file.cpp  \
+ 	simple-mtpfs-util.cpp           \
+-	simple-mtpfs-db.cpp
++	simple-mtpfs-db.cpp             \
++	simple-mtpfs-ringbuf.h          \
++	simple-mtpfs-ringbuf.cpp
+diff --git a/src/simple-mtpfs-fuse.cpp b/src/simple-mtpfs-fuse.cpp
+index 7c84d80..129a458 100755
+--- a/src/simple-mtpfs-fuse.cpp
++++ b/src/simple-mtpfs-fuse.cpp
+@@ -22,6 +22,7 @@ extern "C" {
+ #  include <fuse/fuse_opt.h>
+ #  include <unistd.h>
+ #  include <stddef.h>
++#include <poll.h>
+ }
+ #include "simple-mtpfs-fuse.h"
+ #include "simple-mtpfs-log.h"
+@@ -80,7 +81,6 @@ int wrap_utime(const char *path, struct utimbuf *ubuf)
+ 
+ int wrap_open(const char *path, struct fuse_file_info *file_info)
+ {
+-    LogDebug("enter wrap_open path:%s", path);
+     //return SMTPFileSystem::instance()->open(path, file_info);
+     return 0;
+ }
+@@ -94,14 +94,14 @@ int wrap_access(const char *path, int mask)
+ int wrap_read(const char *path, char *buf, size_t size, off_t offset,
+     struct fuse_file_info *file_info)
+ {
+-    LogDebug("enter wrap_read, size is :%d offset is:%d", size, offset);
++    //LogInfo("enter wrap_read[%s], size is :%d offset is:%d", path, size, offset);
+     return SMTPFileSystem::instance()->read(path, buf, size, offset, file_info);
+ 	
+ }
+ 
+ int wrap_readbuf(const char *path, struct fuse_bufvec **bufp, size_t size, off_t off, struct fuse_file_info *fileinfo)
+ {
+-	LogDebug("enter wrap_readbuf, size is :%d offset is:%d", size, off);
++	//LogInfo("enter wrap_readbuf[%s], size is :%d offset is:%d", path, size, off);
+ 	int readsize = 0;
+ 	struct fuse_bufvec* fbuf =(struct fuse_bufvec*)malloc(sizeof(struct fuse_bufvec));
+ 	if(!fbuf)
+@@ -190,7 +190,18 @@ int wrap_ftruncate(const char *path, off_t offset, struct fuse_file_info *file_i
+     return SMTPFileSystem::instance()->ftruncate(path, offset, file_info);
+ }
+ 
+-// -----------------------------------------------------------------------------
++int wrap_ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *file_info, unsigned int flags, void *data)
++{
++   LogDebug("path:%s", path);
++   return SMTPFileSystem::instance()->ioctl(path, cmd, arg, file_info, flags, data);
++}
++
++int wrap_poll(const char *path, struct fuse_file_info *file_info, struct fuse_pollhandle *ph, unsigned *reventsp)
++{
++   LogDebug("path:%s", path);
++   return SMTPFileSystem::instance()->poll(path, file_info, ph, reventsp);
++}
++
+ 
+ SMTPFileSystem::SMTPFileSystemOptions::SMTPFileSystemOptions()
+     : m_good(false)
+@@ -248,6 +259,7 @@ SMTPFileSystem::SMTPFileSystem():
+     m_tmp_files_pool(),
+     m_options(),
+     m_device()
++   //  selectFd(0LL)
+ {
+     m_fuse_operations.getattr = wrap_getattr;
+     m_fuse_operations.readlink = nullptr;
+@@ -265,7 +277,7 @@ SMTPFileSystem::SMTPFileSystem():
+     m_fuse_operations.utime = nullptr;//wrap_utime;
+     m_fuse_operations.open = wrap_open;
+     m_fuse_operations.read = wrap_read;
+-	 m_fuse_operations.read_buf = wrap_readbuf;
++	m_fuse_operations.read_buf = wrap_readbuf;//nullptr;//wrap_readbuf;
+     m_fuse_operations.write = nullptr;//wrap_write;
+     m_fuse_operations.statfs = wrap_statfs;
+     m_fuse_operations.flush = wrap_flush;
+@@ -277,19 +289,23 @@ SMTPFileSystem::SMTPFileSystem():
+     m_fuse_operations.removexattr = nullptr;
+     m_fuse_operations.opendir = wrap_opendir;
+     m_fuse_operations.readdir = wrap_readdir;
+-    m_fuse_operations.releasedir = wrap_releasedir;
+-    m_fuse_operations.fsyncdir = wrap_fsyncdir;
++    m_fuse_operations.releasedir = nullptr;//wrap_releasedir;
++    m_fuse_operations.fsyncdir = nullptr;//wrap_fsyncdir;
+     m_fuse_operations.init = wrap_init;
+     m_fuse_operations.destroy = nullptr;
+     m_fuse_operations.access = wrap_access;
+     m_fuse_operations.create = nullptr;//wrap_create;
+     m_fuse_operations.ftruncate = nullptr;//wrap_ftruncate;
+     m_fuse_operations.fgetattr = nullptr;
++    m_fuse_operations.ioctl = wrap_ioctl;
++    m_fuse_operations.poll = wrap_poll;
+ }
+ 
++
+ SMTPFileSystem::~SMTPFileSystem()
+ {
+     fuse_opt_free_args(&m_args);
++   //  selectFd  = 0LL;
+ }
+ 
+ bool SMTPFileSystem::parseOptions(int argc, char **argv)
+@@ -444,13 +460,17 @@ bool SMTPFileSystem::exec()
+ 
+ void* SMTPFileSystem::init(struct fuse_conn_info *conn)
+ {
+-    return nullptr;
++   LogInfo("enter init");
++   m_device.launchTasks();
++   return nullptr;
+ }
+ 
+ int SMTPFileSystem::getattr(const char *path, struct stat *buf)
+ {
+-	LogDebug(" enter getattr path: %s", path);
++   string ioctlNode = "/";
++   ioctlNode += SMTPFSIOCTLNODE;
+ 
++	LogDebug("enter, path: %s", path);
+ 	memset(buf, 0, sizeof(struct stat));
+ 	struct fuse_context *fc = fuse_get_context();
+ 	buf->st_uid = fc->uid;
+@@ -459,9 +479,19 @@ int SMTPFileSystem::getattr(const char *path, struct stat *buf)
+ 	{
+ 		buf->st_mode = S_IFDIR | 0775;
+ 		buf->st_nlink = 2;
+-		LogInfo("err 000 path=='/'");
++		LogDebug("path == '/'");
+ 		return 0;
+ 	} 
++   else if(path == ioctlNode)
++   {
++      //LogInfo("smtpfs ioctl node: %s", path);
++      buf->st_ino = 0;
++      buf->st_size = 128*1024;
++      buf->st_blocks = 512;
++      buf->st_nlink = 1;
++      buf->st_mode = S_IFREG | 0644;
++      //LogInfo(" %s is fake file", path);
++   }
+ 	else 
+ 	{
+ 		bool isFile = isMediaType(path);
+@@ -492,13 +522,15 @@ int SMTPFileSystem::getattr(const char *path, struct stat *buf)
+ 				buf->st_ctime = buf->st_mtime;
+ 				buf->st_atime = buf->st_mtime;
+ 				LogDebug("path:%s is file", path);
++				//LogInfo("%s size: %llu", path, buf->st_size);
+ 				return 0;
+ 			} 
+ 		}
+ 
+ 		if(isFile)
+ 		{
+-			LogDebug("query file %s from db", path);
++			//LogInfo("query file %s from db", path);
++			#ifdef MTP_HAS_DB
+ 			//find the file from smtpfs.db
+ 			uint32_t fileId = 0;
+ 			string pathStr = path;
+@@ -507,11 +539,12 @@ int SMTPFileSystem::getattr(const char *path, struct stat *buf)
+ 			//get file info by database
+ 			if(fileId && !m_device.getFileInfoById(fileId, buf))
+ 			{
+-				LogDebug("file %s exist in db", path);
++				LogInfo("file %s exist in db", path);
+ 				return 0;
+ 			}
+ 			//if the file dose not exist in database
+ 			else 
++			#endif
+ 			{
+ 				LogError("file %s not exist in db", path);
+ 				return -ENOENT;
+@@ -527,9 +560,9 @@ int SMTPFileSystem::getattr(const char *path, struct stat *buf)
+ 		}
+ 	}
+ 
+-	LogDebug("exit getattr");
++	LogDebug("exit");
+ 
+-	return 0;
++    return 0;
+ }
+ 
+ int SMTPFileSystem::mknod(const char *path, mode_t mode, dev_t dev)
+@@ -668,6 +701,39 @@ int SMTPFileSystem::create(const char *path, mode_t mode, fuse_file_info *file_i
+ 
+ int SMTPFileSystem::open(const char *path, struct fuse_file_info *file_info)
+ {
++	#if 1
++	string ioctlNode = "/";
++	ioctlNode += SMTPFSIOCTLNODE;
++    
++	if(!path || !file_info)
++	{
++		LogError("pointer NULL, path: %p, file_info: %p", path, file_info);
++		return -1;
++	}
++
++	if(path == ioctlNode)
++	{
++		// if(!selectFd)
++		// {
++		// 	uint64_t handle = 0x0807060504030201;
++		// 	//LogInfo("enter open path:%s, fh: %llx --> %llx,", path, file_info->fh, handle);
++		// 	file_info->fh = handle;
++		// 	selectFd = handle;
++		// }
++		// else
++		// {
++		// 	LogWarning("open control node had been open, please check if multi-open");
++		// }
++
++	}
++	else
++	{
++		//LogInfo("enter open path:%s, fh: %llx --> 0", path, file_info->fh);
++		file_info->fh = 0;
++	}
++
++    return 0;
++	#else
+     if (file_info->flags & O_WRONLY)
+         file_info->flags |= O_TRUNC;
+ 
+@@ -701,24 +767,31 @@ int SMTPFileSystem::open(const char *path, struct fuse_file_info *file_info)
+         m_tmp_files_pool.addFile(TypeTmpFile(std_path, tmp_path, fd));
+ 
+     return 0;
++	#endif
+ }
+ 
+ int SMTPFileSystem::read(const char *path, char *buf, size_t size,
+     off_t offset, struct fuse_file_info *file_info)
+ {
+-#if 0	
+-    int rval = ::pread(file_info->fh, buf, size, offset);
+-    if (rval < 0)
+-        return -errno;
+-    return rval;
+-#endif
+-#if 1
++	int ret = 0;
++	const std::string std_path(path);
++	string ioctlNode = "/";
++	ioctlNode += SMTPFSIOCTLNODE;
+ 
+-	 const std::string std_path(path);
+-	 int ret  = m_device.filesplitPull(std_path,"",size,offset,(unsigned char*)buf);
+-	 return ret;
+-#endif
++   	//LogInfo("read node: %s, size: %u, offset: %u, fh: %llx", path, size, offset, file_info->fh);
++
++	//if(buf) memset(buf, 0x00, size);
+ 
++	if(path == ioctlNode)
++	{
++		//LogInfo("read node: %s, size: %u, offset: %u, fh: %llx", path, size, offset, file_info->fh);
++		//ret = m_device.fillEvent(buf, size);
++	}
++	else
++	{
++		ret  = m_device.filesplitPull(std_path,"",size,offset,(unsigned char*)buf);
++	}
++	return ret;
+ }
+ 
+ int SMTPFileSystem::write(const char *path, const char *buf, size_t size,
+@@ -777,6 +850,8 @@ int SMTPFileSystem::statfs(const char *path, struct statvfs *stat_info)
+     stat_info->f_blocks = m_device.storageTotalSize() / bs;
+     stat_info->f_bavail = m_device.storageFreeSize() / bs;
+     stat_info->f_bfree = stat_info->f_bavail;
++
++	LogInfo(" statfs");
+     return 0;
+ }
+ 
+@@ -803,193 +878,60 @@ int SMTPFileSystem::fsync(const char *path, int datasync,
+ 
+ int SMTPFileSystem::opendir(const char *path, struct fuse_file_info *file_info)
+ {
+-    LogDebug(" enter opendir, path:%s", path);
+-    //note: for sunsang s5 or other non-reach device, 
+-    //invoked LIBMTP_Get_Files_And_Folders_Count() to get the items totle count takes 22 seconds.
+-    // for the 22 seconds, it will block read, so I create a detached pthread to get the count.
+-    //Although the  LIBMTP_Get_Files_And_Folders_Count keep taking 22 seconds, but the openuri return 
+-    //immediately, if the application invoke the readdir duration the 22 seconds, the readdir return . every 60ms.
+-    int ret = m_device.dirFetchCount(std::string(path));
+-    LogDebug(" exit opendir");
+-
+-   return ret;
++   LogDebug(" enter opendir, path:%s", path);
++
++   // string ioctlNode = "/";
++   // ioctlNode += SMTPFSIOCTLNODE;
++   // if(path == ioctlNode)
++   // {
++   //    LogInfo("ioctl node: %s", path);
++   //    return 0;
++   // }
++
++   const TypeDir *content = m_device.dirFetchContentFromCache(std::string(path));
++   if (!content)
++   {
++      LogError(" query path: %s is not cached", path);
++      return -ENOENT;
++   }
++   
++   LogDebug(" exit opendir");
++   return 0;
+ }
+ 
+ int SMTPFileSystem::readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+     off_t offset, struct fuse_file_info *file_info)
+ {
+-    LogDebug(" enter readdir, path:%s", path);
+-    const TypeDir *contentCache = m_device.dirFetchContentFromCache(std::string(path));
+-    if (!contentCache)
+-    {   
+-        LogError("content is NULL");
+-        return -ENOENT;
+-    }
+-    bool fetchedHandleOld = contentCache->getFetchHandleDone();
+-    uint32_t oldFetcheOffset = contentCache->getFetchedOffset();
+-
+-    int itemType = 0;
+-    const TypeDir *content = m_device.dirFetchContent(std::string(path), &itemType);
+-    if (!content)
+-    {   
+-        LogError("content is NULL");
+-        return -ENOENT;
+-    }
++   LogDebug(" enter readdir, path:%s", path);
+ 
+-    bool fetchedHandleNew = content->getFetchHandleDone();
+-    //check if the LIBMTP_Get_Files_And_Folders_Count() had done or not.
+-    //if LIBMTP_Get_Files_And_Folders_Count() had not done, return . dir to application.
+-    // so the application may get many . dirs, application just need ignore more . dirs
+-    if((fetchedHandleOld == false) && (fetchedHandleOld == fetchedHandleNew))
+-    {
+-        //please do not remove the delay
+-        //because simple-mtpfs will always return . dir to application until 
+-        //the LIBMTP_Get_Files_And_Folders_Count() return, so it may lead to endless loop or 
+-        //make cpu usage upon to high level, so simple-mtpfs itself do a usleep(60000) to reduce
+-        //the . dir counts and avoid cpu high usage.       
+-        usleep(60000);
+-        struct stat tmpst;
+-        memset(&tmpst, 0, sizeof(tmpst));
+-        tmpst.st_mode = S_IFDIR | 0775;
+-
+-        filler(buf, ".", &tmpst, offset+1);
+-
+-        LogDebug("fill offset:%d", offset);
+-      
+-        return 0;
+-    }
+-    //if LIBMTP_Get_Files_And_Folders_Count() had done, 
+-    //first reset the offset, then return the read items.
+-    else if((fetchedHandleOld == false) && (fetchedHandleOld != fetchedHandleNew))
+-    {
+-        offset = 0;
+-        LogDebug("reset offset to 0");
+-    }
+-    else if((fetchedHandleOld == fetchedHandleNew) && !oldFetcheOffset && content->getFetchedOffset())
+-    {
+-        offset = 0;
+-        LogDebug("reset offset to 0 again");
+-    }
+-    
+-    const std::vector<TypeDir> dirs = content->dirs();
+-    const std::vector<TypeFile> files = content->files();
+-    uint32_t id = 0;
+-    
+-    if(offset >= content->getItemCount())
+-    {
+-        LogError("reach max");
+-        return -ENOENT;
+-    }
+-    //item type is folder 
+-    if(dirs.size() && (itemType == MTP_ITEMTYPE_FOLDER))
+-    {
+-        LogDebug("item is folder");
+-        TypeDir d = dirs[dirs.size() - 1];
+-
+-        struct stat st;
+-        memset(&st, 0, sizeof(st));
+-        st.st_ino = d.id();
+-        st.st_mode = S_IFDIR | 0775;
+-
+-        #if 0
+-        if(content->getItemCount() == (dirs.size() + files.size()))
+-        {
+-           id = 0;
+-        }
+-        else
+-        #endif
+-        {
+-            id = offset + 1;
+-        }
++   const TypeDir *content = m_device.dirFetchContentFromCache(std::string(path));
++   if (!content)
++   {
++      LogError(" query path: %s is not cached", path);
++      return -ENOENT;
++   }
+ 
+-        filler(buf, d.name().c_str(), &st, id);
+-      
+-        LogDebug("%s is dir", d.name().c_str());
+-    }
+-    //item type is file
+-    else if(files.size() && (itemType == MTP_ITEMTYPE_FILE)) 
+-    {
+-        TypeFile f = files[files.size() - 1];
+-        struct stat st;
+-        memset(&st, 0, sizeof(st));
+-        st.st_ino = f.id();
+-        st.st_mode = S_IFREG | 0644;
+-
+-        #if 0
+-        if(content->getItemCount() == (dirs.size() + files.size()))
+-        {
+-            id = 0;
+-        }
+-        else
+-        #endif
+-        {
+-            id = offset + 1;
+-        }
++   const std::vector<TypeDir> dirs = content->dirs();
++   const std::vector<TypeFile> files = content->files();
+ 
+-        filler(buf, f.name().c_str(), &st, id);
++   for (const TypeDir &d : dirs) {
++      struct stat st;
++      memset(&st, 0, sizeof(st));
++      st.st_ino = d.id();
++      st.st_mode = S_IFDIR | 0775;
++      filler(buf, d.name().c_str(), &st, 0);
++   }
+ 
+-        LogDebug("%s is file", f.name().c_str());
++   for (const TypeFile &f : files) {
++      struct stat st;
++      memset(&st, 0, sizeof(st));
++      st.st_ino = f.id();
++      st.st_mode = S_IFREG | 0644;
++      filler(buf, f.name().c_str(), &st, 0);
+    }
+-   //item type is unknow type,it presents the item had exist
+-   else
+-   {
+-        //for exist item, first fetch the dir by offset
+-        if(dirs.size() && (offset < dirs.size()))
+-        {
+-            TypeDir d = dirs[offset];
+-
+-            struct stat st;
+-            memset(&st, 0, sizeof(st));
+-            st.st_ino = d.id();
+-            st.st_mode = S_IFDIR | 0775;
+-
+-            #if 0
+-            if((content->getItemCount() == dirs.size()) && (offset == (dirs.size() - 1)))
+-            {
+-                id = 0;
+-            }
+-            else
+-            #endif
+-            {
+-                id = offset + 1;
+-            }
+-
+-            filler(buf, d.name().c_str(), &st, id);
+-         
+-            LogDebug("%s is old dir", d.name().c_str());
+-        }
+-        //for exist item,  fetch the file by offset
+-        else if(files.size() && (offset < (files.size() + dirs.size())))
+-        {
+-            TypeFile f = files[offset - dirs.size()];
+-            struct stat st;
+-            memset(&st, 0, sizeof(st));
+-            st.st_ino = f.id();
+-            st.st_mode = S_IFREG | 0644;
+-         
+-            #if 0
+-            if((content->getItemCount() == (files.size() + dirs.size())) && (offset == (dirs.size() + files.size() - 1)))
+-            {
+-                id = 0;
+-            }
+-            else
+-            #endif
+-            {
+-                id = offset + 1;
+-            }
+-            filler(buf, f.name().c_str(), &st, id);
+-
+-            LogDebug("%s is old file", f.name().c_str());
+-        }
+-        //exception, no items
+-        else
+-        {
+-            LogError(" %d is unknown", id);
+-        }
+-    }
+ 
+-    LogDebug("exit readdir");
+-    return 0;
++   LogDebug("exit readdir");
++   return 0;
+ }
+ 
+ int SMTPFileSystem::releasedir(const char *path, struct fuse_file_info *file_info)
+@@ -1015,7 +957,7 @@ int SMTPFileSystem::ftruncate(const char *path, off_t offset,
+ 
+ int SMTPFileSystem::access(const char *path, int mask)
+ {
+-	LogDebug(" enter access, path:%s", path);
++	//LogInfo(" enter access, path:%s", path);
+ 
+ 	if(!path)
+ 	{
+@@ -1023,6 +965,7 @@ int SMTPFileSystem::access(const char *path, int mask)
+ 		return -EINVAL;
+ 	}
+ 
++   	bool isInCache = false;
+ 	//1st,check if the path is exist or not from cache pool
+ 	std::string tmp_basename(smtpfs_basename(std::string(path)));
+ 	std::string tmp_dirname(smtpfs_dirname(std::string(path)));
+@@ -1038,8 +981,6 @@ int SMTPFileSystem::access(const char *path, int mask)
+ 		return 0;
+ 	}
+ 
+-	bool isInCache = false;
+-
+ 	const TypeDir *parent = m_device.dirFetchContentFromCache(tmp_dirname);
+ 	if(parent)
+ 	{
+@@ -1058,9 +999,9 @@ int SMTPFileSystem::access(const char *path, int mask)
+ 
+ 	if(isInCache == false)
+ 	{
+-		LogDebug("query from db path:%s ", path);;
+-
++		//LogInfo("query from db path:%s ", path);
+ 		uint32_t fileId = 0;
++		#ifdef MTP_HAS_DB
+ 		string pathStr = path;
+ 		m_device.queryFileID(pathStr, m_device.getUUID(), &fileId);
+ 		if(!fileId)
+@@ -1068,6 +1009,27 @@ int SMTPFileSystem::access(const char *path, int mask)
+ 			LogError("not exist in db, path:%s", path);
+ 			return -ENOENT;
+ 		}
++
++      // while(!m_device.indexingDone())
++      // {
++      //    if(m_device.isFileExist(fileId))
++      //    {
++      //       LogInfo(" fileId: %u exist from mtp phone ", fileId);
++      //       break;
++      //    }
++      //    else
++      //    {
++      //       sleep(1);
++      //       LogInfo(" wait fileId: %u exist from mtp phone ", fileId);
++      //    } 
++      // }
++
++      if(!m_device.isFileExist(fileId))
++	  #endif
++      {
++         LogInfo(" fileId: %u not exist from mtp phone, access failed ", fileId);
++         return -ENOENT;
++      }
+ 	}
+ 
+ 	if(mask & W_OK)
+@@ -1082,6 +1044,108 @@ int SMTPFileSystem::access(const char *path, int mask)
+ 		return -EINVAL; 
+ 	}
+ 
+-	LogInfo("exit access");
++	//LogInfo("exit access");
+ 	return 0;
++}
++
++int SMTPFileSystem::ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *file_info, unsigned int flags, void *data)
++{
++	int ret = 0;
++	string ioctlNode = "/";
++	ioctlNode += SMTPFSIOCTLNODE;
++
++   //LogInfo("enter path:%s", path);
++
++   if(!path || !file_info)
++   {
++      LogError(" invalid input pointer");
++      return -1;
++   }
++
++   if(ioctlNode != path)
++   {
++	   return -ENOSYS;
++   }
++
++   //LogInfo("path: %s, data: %p, data: %x", path, data, data);
++
++   if (flags & FUSE_IOCTL_COMPAT)
++   {
++      LogError("not support FUSE_IOCTL_COMPAT");
++      return -ENOSYS;
++   }
++   
++   switch (cmd) 
++   {
++      case SMTPFS_GETEVENT:
++      {
++         //LogInfo(" cmd: SMTPFS_GETEVENT, %p, %p", data, arg);
++         ret = m_device.getEvent((char *)data, SMTPFS_EVENT_MAXLEN);
++      }break;
++
++      case SMTPFS_SETEVENT:
++      {
++         LogInfo(" cmd: SMTPFS_SETEVENT, %p, %p", data, arg);
++         ret = m_device.setEvent((char *)data, SMTPFS_EVENT_MAXLEN);
++      }break;
++
++      default: 
++      {
++         //LogWarning(" unsupported cmd");
++         ret = -EINVAL;
++      }break;
++	}
++
++   //LogInfo(" ioctl, ret: %d", ret);
++
++	return ret;
++}
++
++int SMTPFileSystem::poll(const char *path, struct fuse_file_info *file_info, struct fuse_pollhandle *ph, unsigned *reventsp)
++{
++	int ret = 0;
++	string ioctlNode = "/";
++	ioctlNode += SMTPFSIOCTLNODE;
++
++	//LogInfo("enter path:%s, fh: %llx", path, file_info->fh);
++
++	if(!path || !file_info || !ph || !reventsp)
++	{
++		LogError(" invalid input pointer");
++		return -1;;
++	}
++
++	if(ioctlNode != path)
++	{
++		return -ENOSYS;;
++	}
++
++	// if(0)//(file_info->fh != selectFd)
++	// {
++	// 	LogInfo("selectFd[%llx] != fh[%llx], not trigger poll", selectFd, file_info->fh);
++	// 	fuse_pollhandle_destroy(ph);
++	// 	return 0;
++	// }
++
++//    if(!m_device.canTriggerNotify())
++//    {
++// 	   LogInfo("not trigget poll");
++// 	   fuse_pollhandle_destroy(ph);
++// 	   return 0;
++//    }
++
++	if(ph && (false == m_device.indexingDone()))
++	{
++		//LogInfo("has event to happen, notify app");
++		*reventsp |= POLLIN;
++		fuse_notify_poll(ph);
++	}
++	else
++	{
++		//LogInfo("indexing done, not notify polling");
++		ret = -1;
++	}
++
++	//LogInfo("exit path:%s", path);
++	return ret;
+ }
+\ No newline at end of file
+diff --git a/src/simple-mtpfs-fuse.h b/src/simple-mtpfs-fuse.h
+index 22847db..2ad6a55 100755
+--- a/src/simple-mtpfs-fuse.h
++++ b/src/simple-mtpfs-fuse.h
+@@ -103,6 +103,10 @@ public:
+     void* init(struct fuse_conn_info *conn);
+     int create(const char *path, mode_t mode, fuse_file_info *file_info);
+     int access(const char *path, int mask);
++    int ioctl(const char *path, int cmd, void *arg, struct fuse_file_info *file_info, unsigned int flags, void *data);
++    int poll(const char *path, struct fuse_file_info *file_info, struct fuse_pollhandle *ph, unsigned *reventsp);
++    //void polLock() { m_Pollhandle_lock.lock(); }
++    //void polUnlock() { m_Pollhandle_lock.unlock(); }
+ 
+ private:
+     static bool removeDir(const std::string &dirname);
+@@ -115,7 +119,13 @@ private:
+     struct fuse_operations m_fuse_operations;
+     TmpFilesPool m_tmp_files_pool;
+     SMTPFileSystemOptions m_options;
++    
++public:
+     MTPDevice m_device;
++
++// private:
++//    //save select node file handle
++//     uint64_t selectFd;
+ };
+ 
+ #endif // SMTPFS_FUSE_H
+diff --git a/src/simple-mtpfs-log.cpp b/src/simple-mtpfs-log.cpp
+index ef3b075..b88db11 100755
+--- a/src/simple-mtpfs-log.cpp
++++ b/src/simple-mtpfs-log.cpp
+@@ -19,6 +19,7 @@
+ #include <sstream>
+ #include <ctime>
+ #include "simple-mtpfs-log.h"
++#include "simple-mtpfs-util.h"
+ 
+ bool Logger::m_isInited = false;
+ Logger::SMTP_LOG_LEVEL Logger::m_logLevel = SMTP_LOG_LEVEL_INFO;
+@@ -148,15 +149,6 @@ std::string Logger::timestamp()
+     return ss.str();
+ }
+ 
+-long Logger::getSysRunTime()
+-{
+-    struct timespec ts;
+-    clock_gettime(CLOCK_MONOTONIC, &ts);
+-    return ts.tv_sec * 1000L +
+-           ts.tv_nsec / 1000000L;
+-}
+-
+-
+ void Logger::off()
+ {
+     dup2(m_stdout, fileno(stdout));
+diff --git a/src/simple-mtpfs-log.h b/src/simple-mtpfs-log.h
+index 0fec7d7..f736ac9 100755
+--- a/src/simple-mtpfs-log.h
++++ b/src/simple-mtpfs-log.h
+@@ -61,7 +61,7 @@ public:
+ 
+ private:
+     static std::string timestamp();
+-    static long getSysRunTime();
++    //static long getSysRunTime();
+     static string toString(SMTP_LOG_LEVEL level);
+ 
+ private: 
+diff --git a/src/simple-mtpfs-main.cpp b/src/simple-mtpfs-main.cpp
+old mode 100644
+new mode 100755
+index 219b913..fba38da
+--- a/src/simple-mtpfs-main.cpp
++++ b/src/simple-mtpfs-main.cpp
+@@ -23,7 +23,7 @@
+ int main(int argc, char **argv)
+ {
+     Logger::init();
+-    
++
+     SMTPFileSystem *filesystem = SMTPFileSystem::instance();
+ 
+     if (!filesystem->parseOptions(argc, argv)) {
+diff --git a/src/simple-mtpfs-mtp-device.cpp b/src/simple-mtpfs-mtp-device.cpp
+index 24581a1..87b9e69 100755
+--- a/src/simple-mtpfs-mtp-device.cpp
++++ b/src/simple-mtpfs-mtp-device.cpp
+@@ -16,17 +16,18 @@
+ * ***** END LICENSE BLOCK ***** */
+ 
+ #include <config.h>
+-#include <algorithm>
+ #include <sstream>
+ #include <vector>
+ #include <cstring>
+ #include <cstdint>
+ #include <cstdlib>
++#include <pthread.h>
+ extern "C" {
+ #  include <unistd.h>
+ #  include <sys/types.h>
+ #  define _DARWIN_USE_64_BIT_INODE
+ #  include <sys/stat.h>
++#include <stdio.h>
+ }
+ #include "simple-mtpfs-fuse.h"
+ #include "simple-mtpfs-libmtp.h"
+@@ -38,17 +39,33 @@ uint32_t MTPDevice::s_root_node = ~0;
+ 
+ static LIBMTP_mtpdevice_t *g_device = NULL;
+ static MTPDevice *gMTPDev = NULL;
++#define RINGBUF_SIZE (512*1024) 
+ 
+ MTPDevice::MTPDevice():
++	#ifdef MTP_HAS_DB
+     SIMPLE_DB(),
++	#endif
+     m_device(nullptr),
+     m_capabilities(),
+     m_device_mutex(),
+     m_root_dir(),
+     m_move_enabled(false),
+-    mUUID("")
++    mUUID(""),
++    m_list_all_done(0),
++    m_read_data_cmd_coming(0),
++    m_rbuf(NULL),
++    m_fileName(""),
++    m_fileId(0),
++    m_fileSize(0),
++    m_fileOffset(0),
++	m_trackList_offset(0),
++   	scanThreadRun(false),
++	isIndexingDone(false),
++	m_lastMode_sync_done(false)
+ {
+     gMTPDev = this;
++    sem_init(&device_connect_sem, 0, 0);
++
+     StreamHelper::off();
+     LIBMTP_Init();
+     StreamHelper::on();
+@@ -58,6 +75,10 @@ MTPDevice::~MTPDevice()
+ {
+     disconnect();
+     gMTPDev = NULL;
++    sem_destroy(&device_connect_sem);
++	scanThreadRun = false;
++	isIndexingDone = false;
++	m_lastMode_sync_done = false;
+ }
+ 
+ bool MTPDevice::connect(LIBMTP_raw_device_t *dev)
+@@ -97,7 +118,9 @@ bool MTPDevice::connect(LIBMTP_raw_device_t *dev)
+ 
+     mUUID = tmpStr + seriaID;
+ 
++	#ifdef MTP_HAS_DB
+     writeDevice(mUUID);
++	#endif
+     LogInfo("connected");
+     return true;
+ }
+@@ -202,7 +225,21 @@ bool MTPDevice::connect_priv(int dev_no, const std::string &dev_file)
+     
+     mUUID = tmpStr + seriaID;
+ 
++	#ifdef MTP_HAS_DB
+     writeDevice(mUUID);
++	#endif
++
++    if(m_rbuf)
++    {
++        RingBuffer_Free(m_rbuf);
++    }
++    else
++    {
++        m_rbuf = RingBuffer_Malloc(RINGBUF_SIZE);
++    }
++
++	//setLastModeSyncPath("/");
++
+     return true;
+ }
+ 
+@@ -246,8 +283,10 @@ void MTPDevice::disconnect()
+ 
+     LogInfo("MTPDevice::disconnect start");
+     
++	criticalEnter1();
+     LIBMTP_Release_Device(m_device);
+-
++	criticalLeave1();
++	RingBuffer_Free(m_rbuf);
+     m_device = nullptr;
+     g_device = m_device;
+     mUUID = "";
+@@ -289,27 +328,27 @@ bool MTPDevice::enumStorages()
+ 
+ const TypeDir *MTPDevice::dirFetchContentFromCache(std::string path)
+ {
+-    LogDebug("path:%s", path.c_str());
++    //LogInfo("path:%s", path.c_str());
+ 
+-    if (!m_root_dir.isFetched()) {
+-        int count = 0;
++    if (false == m_root_dir.isFetched()) {
++        //int count = 0;
+         for (LIBMTP_devicestorage_t *s = m_device->storage; s; s = s->next) {
+             m_root_dir.addDir(TypeDir(s_root_node, 0, s->id, std::string(s->StorageDescription)));
+             LogInfo("path:%s addDir %s, storageid:%d", path.c_str(), s->StorageDescription, s->id);
+             LogDebug("path:%s setFetched", path.c_str());
+             m_root_dir.setFetched();
+-            count++;
++            //count++;
+         }
+-        m_root_dir.setItemCount(count);
+-        m_root_dir.setFetchHandleDone(true);
++        //m_root_dir.setItemCount(count);
++        //m_root_dir.setFetchHandleDone(true);
+     }
+ 
+-    if (m_root_dir.dirCount() == 1)
+-        path = '/' + m_root_dir.dirs().begin()->name() + path;
++    // if (m_root_dir.dirCount() == 1)
++    //     path = '/' + m_root_dir.dirs().begin()->name() + path;
+ 
+     if (path == "/")
+     {
+-        LogInfo("path is / , return m_root_dir");
++        //LogInfo("path is / , return m_root_dir");
+         return &m_root_dir;
+     }
+ 
+@@ -318,17 +357,17 @@ const TypeDir *MTPDevice::dirFetchContentFromCache(std::string path)
+     TypeDir *dir = &m_root_dir;
+ 
+     while (std::getline(ss, member, '/')) {
+-		
++      
+         if (member.empty())
+             continue;
+ 
+         const TypeDir *tmp = dir->dir(member);
+         if (!tmp)
+         {
+-            LogError("not found :%s", member.c_str());
++            //LogError("not found :%s", member.c_str());
+             return nullptr;
+         }
+-		
++      
+         dir = const_cast<TypeDir*>(tmp);
+     }
+ 
+@@ -336,322 +375,6 @@ const TypeDir *MTPDevice::dirFetchContentFromCache(std::string path)
+     return dir;
+ }
+ 
+-void* dirFetchCountThreadRUn(void *arg)
+-{
+-   TypeDir *dir = (TypeDir *)arg;
+-
+-   if(dir == NULL)
+-   {
+-      LogError("dir is NULL");
+-      return NULL;
+-   }
+-
+-   LogInfo("enter  dirFetchCountThreadRUn dir name:%s storageid: %d, id:%d", dir->name().c_str(), dir->storageid(), dir->id());
+-
+-   if(g_device == NULL)
+-   {
+-      LogError("g_device is NULL");
+-      return NULL;
+-   }
+-
+-   do
+-   {
+-      uint32_t i = dir->getFetchedOffset();
+-      ObjectHandles *handles = dir->getObjHandles();
+-      if(!handles)
+-      {
+-         LogError("handles is NULL");
+-         return NULL;
+-      }
+-
+-      //get handles by libmtp
+-      //if never read the items by libmtp under this path, go to get the count 
+-      //cover conditions following
+-      //1 the count changed 
+-      //2 the count get failed previous
+-      //3 the count is 0, but the real count is not 0.
+-      if(!i)
+-      {
+-         LogDebug("dir->name:%s", dir->name().c_str());
+-         
+-         dir->setFetchHandleDone(false);
+-         int retryCnt = 3;
+-
+-         int32_t ret = 0;
+-
+-         struct timeval startTime, endTime;
+-         unsigned long diffTime;
+-
+-         do 
+-         {
+-            //criticalEnter1();
+-            if(!g_device) break;
+-            if(!gMTPDev) break;
+-
+-            LogDebug("get lock start");
+-            gMTPDev->criticalEnter1();
+-            gettimeofday(&startTime, NULL);
+-            LogDebug("call LIBMTP_Get_Files_And_Folders_Count start");
+-            
+-            StreamHelper::off();
+-            ret = LIBMTP_Get_Files_And_Folders_Count(g_device,
+-                     dir->storageid(),
+-                     dir->id(),
+-                     handles);
+-            StreamHelper::on();
+-
+-            LogDebug("call LIBMTP_Get_Files_And_Folders_Count returned");
+-            gettimeofday(&endTime, NULL);
+-            gMTPDev->criticalLeave1();
+-            LogDebug("get lock end");
+-
+-             diffTime = (endTime.tv_sec - startTime.tv_sec);
+-             if(diffTime >= 2)
+-             {
+-                LogInfo("dir name:%s, diffTIme: %ld", dir->name().c_str(), diffTime);
+-             }
+-
+-            //criticalLeave1();
+-
+-            LogDebug("LIBMTP_Get_Files_And_Folders_Count done");
+-
+-            if(ret < 0)
+-            {
+-               LogInfo("LIBMTP_Get_Files_And_Folders_Count failed, go retry path:%s", dir->name().c_str());
+-               usleep(100000);
+-            }
+-            else
+-            {
+-               break;
+-            }
+-         }while(--retryCnt);
+-
+-         if(ret >= 0)
+-         {
+-            dir->setFetchHandleDone(true);
+-            dir->setItemCount(handles->n);
+-
+-            if(handles->n >= 100)
+-			{
+-				LogInfo("dirname: %s, count:%d", dir->name().c_str(), handles->n);
+-			}
+-            LogDebug("get count done count:%d", handles->n);
+-         }
+-         //add here for debug
+-         else
+-         {
+-		    //if the dir timeout three times, discard it.
+-            dir->setFetchHandleDone(true);
+-            dir->setItemCount(0);
+-            LogInfo("get count failed, retry also failed");
+-         }
+-      }
+-
+-   }while(0);
+-
+-   LogInfo("exit dirFetchCountThreadRUn");
+-
+-   return NULL;
+-}
+-
+-int MTPDevice::dirFetchCount(std::string path)
+-{
+-   LogDebug("enter path:%s", path.c_str());
+-
+-   TypeDir *dir = (TypeDir *)dirFetchContentFromCache(path);
+-   if (!dir || dir->isFetched())
+-   {
+-      LogDebug("%s", dir == NULL ? "dir is null" : "dir isFetched");
+-      return 0;
+-   }
+-
+-   if(dir->getFetchHandleDone() || dir->getItemCount()) 
+-   {
+-      LogDebug("had get count :%d", dir->getItemCount());
+-      return 0;
+-   }
+-
+-   //detached thread
+-   pthread_attr_t attr;
+-   int ret = 0;
+-   pthread_t pid; 
+-
+-   pthread_attr_init(&attr);
+-   ret = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+-   if(ret)
+-   {
+-      return -1;
+-   }
+-
+-   ret = pthread_create(&pid, &attr, &dirFetchCountThreadRUn, (void *)dir);
+-   if(ret)
+-   {
+-      return -1;
+-   }
+-
+-   pthread_attr_destroy(&attr);
+-
+-   LogDebug("exit");
+-   return 0;
+-}
+-
+-const TypeDir *MTPDevice::dirFetchContent(std::string path, int *itemType)
+-{
+-    LogDebug("enter path:%s", path.c_str());
+-
+-    if(itemType == NULL)
+-    {
+-       LogError("itemType is NULL");
+-       return nullptr;
+-    }
+-
+-   TypeDir *dir = (TypeDir *)dirFetchContentFromCache(path);
+-
+-   if (!dir || dir->isFetched())
+-   {
+-      itemType = MTP_ITEMTYPE_UNKOWN;
+-      LogDebug("%s", dir == NULL ? "dir is null" : "dir isFetched from cache");
+-      return dir;
+-   }
+-
+-   //criticalEnter();
+-
+-	uint32_t i = dir->getFetchedOffset();
+-	ObjectHandles *handles = dir->getObjHandles();
+-	if(!handles)
+-	{
+-		LogError("handles is NULL");
+-		return nullptr;
+-	}
+-
+-   #if 0
+-    //get handles by libmtp
+-    if(!i)
+-    {
+-		LogInfo("LIBMTP_Get_Files_And_Folders_Count");
+-
+-      int32_t ret = 0;
+-		ret = LIBMTP_Get_Files_And_Folders_Count(m_device,
+-					dir->storageid(),
+-					dir->id(),
+-					handles);
+-
+-        LogInfo("LIBMTP_Get_Files_And_Folders_Count done");
+-
+-		if(ret < 0)
+-		{
+-			LogInfo("LIBMTP_Get_Files_And_Folders_Count failed.");
+-			return nullptr;
+-		}
+-
+-      dir->setItemCount(handles->n);
+-    }
+-    #else
+-    if(dir->getFetchHandleDone() == false)
+-    {
+-       LogDebug("getFetchHandleDone return");
+-       return dir;
+-    }
+-    #endif
+-
+-	//get files by libmtp
+-    uint32_t tmpn = 1 + i;
+-	if(tmpn >= handles->n)
+-	{
+-		tmpn = handles->n;
+-	}
+-
+-    LogDebug("i:%d, handles->n:%d", i, handles->n);
+-
+-   struct timeval startTime, endTime;
+-   unsigned long diffTime;
+-
+-	for( ; i < tmpn; i++)
+-   {
+-       gettimeofday(&startTime, NULL);
+-       LogDebug("get lock start");
+-       criticalEnter1();
+-       LogDebug("call LIBMTP_Get_Files_And_Folders_ByHandle start");
+-       StreamHelper::off();
+-       LIBMTP_file_t *f = LIBMTP_Get_Files_And_Folders_ByHandle(m_device, handles->Handler[i]);
+-       StreamHelper::on();
+-       LogDebug("call LIBMTP_Get_Files_And_Folders_ByHandle end\n");
+-       criticalLeave1();
+-       LogDebug("get lock end");
+-       gettimeofday(&endTime, NULL);
+-       diffTime = (endTime.tv_sec - startTime.tv_sec);
+-       if(diffTime >= 2)
+-       {
+-          LogDebug("path:%s, diffTime:%ld", path.c_str(), diffTime);
+-       }
+-
+-       if(f == NULL)
+-       {
+-          LogInfo("f is null, i:%d, handles->Handler[i]:%d", i, handles->Handler[i]);
+-          continue;
+-       }
+-
+-	    dir->setFetchedOffset(i+1);
+-
+-        LogDebug("filename:%s, filetype:%d", f->filename, f->filetype);
+-
+-       if (f->filetype == LIBMTP_FILETYPE_FOLDER)
+-       {
+-            dir->addDir(TypeDir(f));
+-            *itemType = MTP_ITEMTYPE_FOLDER;
+-       }
+-      else
+-      {
+-         dir->addFile(TypeFile(f));
+-         *itemType = MTP_ITEMTYPE_FILE;
+-
+-         //save into db 
+-         if(isMediaType(f->filename))
+-         {
+-            std::string filePath = "";
+-            LogDebug("writeFileID, path: %s, dirname: %s", path.c_str(), dir->name().c_str());
+-
+-            if(path != "/")
+-            {
+-               filePath = path + "/" + f->filename;
+-            }
+-            else
+-            {
+-               filePath = path + f->filename;
+-            }
+-
+-            LogDebug("writeFileID, filePath: %s", filePath.c_str());
+-            
+-            writeFileID(filePath, f->item_id, mUUID);
+-         }
+-      }
+-
+-       LIBMTP_Free_Files_And_Folders(&f); 
+-   }
+-
+-   
+-   #if 0
+-   if(*itemType == MTP_ITEMTYPE_UNKOWN)
+-   {
+-        LogDebug("setFetchedOffset: %d", i);
+-        dir->setFetchedOffset(i);
+-   }
+-   #endif
+-
+-	if(dir->getFetchedOffset() == handles->n)
+-	{
+-		LogDebug("LIBMTP_Free_ObjHandles");
+-    	LIBMTP_Free_ObjHandles(handles);
+-        LogDebug("path:%s setFetched", path.c_str());
+-		dir->setFetched();
+-	}
+-	
+-	 //criticalLeave();
+-
+-    LogDebug("exit dirFetchContent");
+-    return dir;
+-}
+-
+ 
+ int MTPDevice::dirCreateNew(const std::string &path)
+ {
+@@ -812,83 +535,254 @@ int MTPDevice::rename(const std::string &oldpath, const std::string &newpath)
+ #endif
+ }
+ 
++int MTPDevice::filesplitPull(const std::string &src, const std::string &dst, uint32_t size, uint32_t offset, unsigned char* buf)
++{
++    bool isInCache = true;
++    int readLen = 0;
++    const std::string src_basename(smtpfs_basename(src));
++    const std::string src_dirname(smtpfs_dirname(src));
++
++    //LogInfo("basename: %s, dirname: %s", src_basename.c_str(), src_dirname.c_str());
++
++    //LogInfo("src: %s, size:%u, offset:%llu", src.c_str(), , offset);
++
++	//LogInfo("read path: %s, old path: %s", src.c_str(), m_fileName.c_str());
++
++   	if(m_fileName != src)
++	{	
++		const TypeDir *dir_parent = dirFetchContentFromCache(src_dirname);
++		const TypeFile *file_to_fetch = dir_parent ? dir_parent->file(src_basename) : nullptr;
++		if (!dir_parent) {
++			//LogDebug("dir_parent Can not fetch %s", src.c_str());
++			isInCache = false;
++		}
++
++		if (!file_to_fetch) {
++			//LogDebug("file_to_fetch No such file %s", src.c_str());
++			isInCache = false;
++		}
++
++		if(isInCache == true)
++		{
++			m_fileId = file_to_fetch->id();
++			m_fileSize = file_to_fetch->size();
++		}
++		else
++		{
++			string path = src.c_str();
++			#ifdef MTP_HAS_DB
++			queryFileID(path, getUUID(), &m_fileId);
++			if(!m_fileId)
++			#endif
++			{
++				LogError("queryFileID No such file %s", src.c_str());
++				return -EINVAL;
++			}
++
++			criticalEnter1();
++			LIBMTP_file_t *file = LIBMTP_Get_Filemetadata(m_device, m_fileId);
++			criticalLeave1();
++			if(file)
++			{
++				m_fileSize = file->filesize;
++			}
++		}
++
++		m_fileName = src;
++		m_fileOffset = 0;
++      	RingBuffer_Reset(m_rbuf);
++    }
++
++    readLen = readByRingBuf(m_fileId, m_fileSize, size, offset, buf);
++	//if(readLen <= 0)
++    //LogInfo("%s, return dataLen: %d, ask size: %d, ask offset: %u, fileSize: %llu", src.c_str(), readLen, size, offset, m_fileSize);
++    return readLen;
++}
+ 
+-int MTPDevice::filesplitPull(const std::string &src,const std::string &dst,uint32_t size, uint32_t offset,unsigned char* buf)
++int MTPDevice::readByRingBuf(const uint32_t id, const uint64_t fileSize,  const uint32_t size, const uint32_t offset, const unsigned char* buf)
+ {
+-   bool isInCache = true;
+-   uint32_t fileId = 0;
+-   int rval = 0;
+-   const std::string src_basename(smtpfs_basename(src));
+-   const std::string src_dirname(smtpfs_dirname(src));
+-   const TypeDir *dir_parent = dirFetchContentFromCache(src_dirname);
+-   const TypeFile *file_to_fetch = dir_parent ? dir_parent->file(src_basename) : nullptr;
+-   if (!dir_parent) {
+-      LogInfo("dir_parent Can not fetch %s", src.c_str());
+-      isInCache = false;
+-   }
++	//LogInfo("offset: %u, size: %u, m_fileOffset: %u, fileSize: %llu", offset, size, m_fileOffset, fileSize);
++	
++	#if 0
++    //1st, check if the ringbuf valid or not
++    if(m_rbuf == NULL)
++    {   
++        LogError("m_rbuf is NULL");
++        return -1;
++    }
+ 
+-   if (!file_to_fetch) {
+-      LogInfo("file_to_fetch No such file %s", src.c_str());
+-      isInCache = false;
+-   }
++	if(offset >= fileSize)
++	{
++		LogError("offset[%u] >= fileSize[%llu] fail", offset, fileSize);
++		return -1;
++	}
+ 
+-   uint32_t readlen = 0;
+-   unsigned char* tmpbuf = NULL;
++	if(m_fileOffset > fileSize)
++	{
++		LogError("offset[%u] >= fileSize[%llu] fail", offset, fileSize);
++		return -1;
++	}
+ 
+-   if(isInCache == true)
+-   {
+-      fileId = file_to_fetch->id();
+-   }
+-   else
+-   {
+-      string path = src.c_str();
+-      queryFileID(path, getUUID(), &fileId);
+-      if(!fileId)
+-      {
+-         LogError("queryFileID No such file %s", src.c_str());
+-         return -EINVAL;
+-      }
+-   }
++	bool readFromDevice = false;
++	uint32_t rbRemainLen = RingBuffer_Len(m_rbuf);
++	uint64_t rbOffsetEnd = m_fileOffset;
++	uint64_t rbOffsetStart = rbOffsetEnd - rbRemainLen;
+ 
+-   LogDebug(" read file: %s", src.c_str());
++	//LogInfo("rbRemainLen: %u, rbOffsetStart: %llu, rbOffsetEnd: %llu", rbRemainLen, rbOffsetStart, rbOffsetEnd);
++	//no data in ringbuf
++	if(!rbRemainLen && size)
++	{
++		//LogInfo("rb reset: rb remail is 0");
++		RingBuffer_Reset(m_rbuf);
++		m_fileOffset = offset;
++		readFromDevice = true;
++	}
++	//ask offset and size is out of ringbuf range
++	else if((offset < rbOffsetStart) || (offset > rbOffsetEnd))
++	{
++		//LogInfo("rb reset, offset is out of range, rbOffsetLow: %u", rbOffsetLow);
++		RingBuffer_Reset(m_rbuf);
++		m_fileOffset = offset;
++		readFromDevice = true;
++	}
+ 
+-   struct timeval startTime, endTime;
+-   unsigned long diffTime;
++    //if ring buf is empty, read data from device into ringbuf
++    if(readFromDevice)
++    { 
++        int rVal = 0;
++        uint32_t tmpLen = 0;
++        long diffTime;
++        unsigned char* tmpBuf = NULL;
++
++		m_read_data_cmd_coming = 1;
++        long t1 = getSysRunTime();
++		//LogInfo("read get lock, 1111");
++        criticalEnter1();
++		//LogInfo("read get lock, 2222");
++        rVal = LIBMTP_GetPartialObject(m_device, id, m_fileOffset, RINGBUF_SIZE, &tmpBuf, &tmpLen);
++		//LogInfo("id: %d, rVal: %d, tmpBuf: %p, tmpLen: %d, fileSize: %llu ms", id, rVal, tmpBuf, tmpLen, fileSize);
++		//LogInfo("read get lock, 3333");
++        criticalLeave1();
++		//LogInfo("read get lock, 4444");
++        long t2 = getSysRunTime();
++        diffTime = t2 - t1;
++        if(diffTime > 2000)
++        {
++            LogInfo("id: %d, rVal: %d, tmpBuf: %p, tmpLen: %d, diffTime: %ld ms", id, rVal, tmpBuf, tmpLen, diffTime);
++        }
+ 
+-   LogDebug(" enter LIBMTP_GetPartialObject, fileId: %d", fileId);
+-   gettimeofday(&startTime, NULL);
+-   criticalEnter1();
+-   rval = LIBMTP_GetPartialObject(m_device,fileId,offset,size,&tmpbuf,&readlen);
+-   criticalLeave1();
+-   gettimeofday(&endTime, NULL);
+-   diffTime = (endTime.tv_sec - startTime.tv_sec);
+-   if(diffTime >= 2)
+-   {
+-      LogDebug("fileId:%d, diffTime:%ld", fileId, diffTime);
+-   }
+-      
+-   LogDebug("exit LIBMTP_GetPartialObject, fileId: %d", fileId);
++		m_read_data_cmd_coming = 0;
+ 
+-   LogDebug("LIBMTP_GetPartialObject rval:%d, readlen:%d, size:%d", rval, readlen, size);
++        //LogInfo("LIBMTP_GetPartialObject rVal:%d, tmpLen:%d, RINGBUF_SIZE:%d", rVal, tmpLen, RINGBUF_SIZE);
+ 
+-   if(!rval && tmpbuf && (readlen <= size) && buf)
+-   {
+-      memcpy(buf,tmpbuf,readlen);
+-      free(tmpbuf);
+-      tmpbuf = NULL;
+-   }
++        if(rVal || (tmpLen > RINGBUF_SIZE)) 
++        {
++            LogError("LIBMTP_GetPartialObject, id: %u, rVal: %d, tmpLen[%d] < RINGBUF_SIZE[%d]", id, rVal, tmpLen, RINGBUF_SIZE);
++            LIBMTP_Dump_Errorstack(m_device);
++            LIBMTP_Clear_Errorstack(m_device);
++			return -1;
++        }
++        else if(!rVal)
++        { 
++			if(tmpLen && tmpBuf)
++			{
++				//push data into ringbuf
++				m_fileOffset += tmpLen;
++				// if(m_fileOffset == fileSize)
++				// {
++				// 	m_fileOffset = 0;
++				// }
++				RingBuffer_In(m_rbuf, (void *)tmpBuf, tmpLen);
++				free(tmpBuf);
++
++				//LogInfo("had read from phone, m_fileOffset: %llu, tmpLen: %u, rbLen: %u", m_fileOffset, tmpLen, RingBufferGetDataSize(m_rbuf));
++			}
++			else 
++			{
++				if(m_fileOffset != fileSize)
++				{
++					LogWarning("read return len == 0, ask app retry");
++					return -EAGAIN;
++				}
++				else
++				{
++					LogInfo("read reach eof");
++					return 0;
++				}
++			}
++        }  
++		
++    }
+ 
+-   //criticalLeave();
+-   if ((rval != 0) || (readlen > size)) {
+-      LogError("Could not fetch file:%s", src.c_str());
+-      LogError("LIBMTP_GetPartialObject rval:%d, readlen:%d, size:%d", rval, readlen, size);
++    //get data from ring buf
++    size_t rBufDataSize = RingBuffer_Out(m_rbuf, (void *)buf, size);
++	return rBufDataSize;
++	#else
++	{ 
++		m_read_data_cmd_coming = 1;
++        int rVal = 0;
++        uint32_t tmpLen = 0;
++        long diffTime;
++        unsigned char* tmpBuf = NULL;
++
++        long t1 = getSysRunTime();
++		//LogInfo("read get lock, 1111");
++        criticalEnter1();
++		//LogInfo("read get lock, 2222");
++        rVal = LIBMTP_GetPartialObject(m_device, id, offset, size, &tmpBuf, &tmpLen);
++		//LogInfo("read get lock, 3333");
++        criticalLeave1();
++		//LogInfo("read get lock, 4444");
++        long t2 = getSysRunTime();
++        diffTime = t2 - t1;
++        if(diffTime > 2000)
++        {
++            LogInfo("id: %d, retLen: %d, diffTime: %ld ms", id, rVal, diffTime);
++        }
+ 
+-      LIBMTP_Dump_Errorstack(m_device);
+-      LIBMTP_Clear_Errorstack(m_device);
+-      return -EAGAIN;
+-   }
+-   LogDebug("File %s fetched ok", src.c_str());
+-   return readlen;
++		m_read_data_cmd_coming = 0;
++
++        //LogInfo("LIBMTP_GetPartialObject rVal:%d, tmpLen:%d, willReadLen:%d", rVal, tmpLen, willReadLen);
++
++        if(rVal || (tmpLen > size)) 
++        {
++            LogError("LIBMTP_GetPartialObject, id: %u, rVal: %d, tmpLen[%d] < willReadLen[%d]", id, rVal, tmpLen, size);
++				
++            LIBMTP_Dump_Errorstack(m_device);
++            LIBMTP_Clear_Errorstack(m_device);
++			return -1;
++        }
++        else if(!rVal)
++		{
++			if(tmpLen && tmpBuf)
++			{ 
++				//push data into ringbuf
++				m_fileOffset += tmpLen;
++				if(m_fileOffset == fileSize)
++				{
++					m_fileOffset = 0;
++				}
++				memcpy((void *)buf, (void *)tmpBuf, tmpLen);
++				free(tmpBuf);
++				return tmpLen;
++			}  
++			else 
++			{
++				if(m_fileOffset != fileSize)
++				{
++					LogWarning("read return len == 0, ask app retry");
++					return -EAGAIN;
++				}
++				else
++				{
++					LogInfo("read reach eof");
++					return 0;
++				}
++			}
++
++		}
++    }
++	#endif
+ }
+ 
+ int MTPDevice::filePull(const std::string &src, const std::string &dst)
+@@ -1132,7 +1026,6 @@ int32_t MTPDevice::getFileInfoById(uint32_t id, struct stat *st)
+    criticalLeave1();
+    if(file == NULL)
+    {
+-      LogInfo("id:%d file is NULL, fake it", id);
+       st->st_ino = id;
+       st->st_size = 1024;
+       st->st_blocks = 1;
+@@ -1141,6 +1034,8 @@ int32_t MTPDevice::getFileInfoById(uint32_t id, struct stat *st)
+       st->st_mtime = time(NULL);
+       st->st_ctime = st->st_mtime;
+       st->st_atime = st->st_mtime;
++
++	  LogDebug("id: %d file is NULL, fake it, size: %llu", id, st->st_size);
+       return 0;
+    }
+ 
+@@ -1154,7 +1049,643 @@ int32_t MTPDevice::getFileInfoById(uint32_t id, struct stat *st)
+    st->st_ctime = st->st_mtime;
+    st->st_atime = st->st_mtime;
+ 
++   LogDebug("id: %d file, size: %llu", id, st->st_size);
++
+    LIBMTP_Free_Files_And_Folders(&file);
+ 
+     return 0;
+- }
+\ No newline at end of file
++ }
++
++bool MTPDevice::isFileExist(const uint32_t id)
++{
++	bool ret = false;
++
++	criticalEnter1();
++	ret = LIBMTP_Track_Exists(m_device, id);
++	criticalLeave1();
++
++	return ret;
++}   
++   
++int MTPDevice::getMediaFileType(LIBMTP_file_t *mtpFile)
++{
++	if(!mtpFile) return MTP_FILE_TYPE_UNKNOWN;
++
++	//track and image
++	int ret = MTP_FILE_TYPE_UNKNOWN;
++	if( isAudioType(mtpFile->filename) )
++	{
++		ret = MTP_FILE_TYPE_AUDIO;
++	}
++	else if(isVideoType(mtpFile->filename))
++	{
++		ret = MTP_FILE_TYPE_VIDEO;
++	}
++	else if(isImageType(mtpFile->filename))
++	{
++		ret = MTP_FILE_TYPE_IMAGE;
++	}
++	else if(isPlayListType(mtpFile->filename))
++	{
++		ret = MTP_FILE_TYPE_PLAYLIST;
++	}
++	else if(isAudioBooksType(mtpFile->filename))
++	{
++		ret = MTP_FILE_TYPE_AUDIOBOOKS;
++	}
++	else
++	{
++		LogInfo("%s is unknown type, ignored", mtpFile->filename);
++	}
++	
++	return ret;
++}
++
++int MTPDevice::getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicestorage_t *storage, uint32_t id, string &path, const string &lastModePath)
++{
++    int ret = 0;
++    ObjectHandles objHlds;
++
++    objHlds.n = 0;
++    objHlds.Handler = NULL;
++
++    //LogInfo("enter\n");
++    //LogInfo("search cache path: %s\n", path.c_str());
++
++    TypeDir *parentDir = (TypeDir *)dirFetchContentFromCache(path);
++    if(parentDir == NULL)
++    {
++        LogError("dir is NULL");
++        return -1;
++    }
++
++    while(m_read_data_cmd_coming)
++    {
++        LogInfo("in syncing, wait, let read cmd first\n");
++        usleep(200000);
++    }
++
++	long t1 = 0, t2 = 0;
++    criticalEnter1();
++    //LogInfo("lock \n");
++	if(device)
++	{
++		t1 = getSysRunTime();
++    	ret = LIBMTP_Get_Files_And_Folders_Count(device, storage->id, id, &objHlds);
++		t2 = getSysRunTime();
++	}
++    //LogInfo("unlock \n");
++    criticalLeave1();
++	if((t2 - t1) >= 2000)
++	{
++		LogInfo("get(%s)count[%u] took: %lu ms\n", path.c_str(), objHlds.n, (t2-t1));
++	}
++
++    if(ret < 0)
++    {
++        LogError("LIBMTP_Get_Files_And_Folders_Count: %s failed", path.c_str());
++        return -1;
++    }
++
++	uint32_t timeoutCnt = 0;
++    for(uint32_t i = 0; i < objHlds.n; i++)
++    {
++		while(m_read_data_cmd_coming)
++		{
++			LogInfo("in syncing, wait, let read cmd first\n");
++			usleep(200000);
++		}
++
++		if(device == NULL) break;
++
++		//LogInfo("lock 111\n");
++		long t3 = 0, t4 = 0;
++		criticalEnter1();
++		//LogInfo("lock 2222\n");
++		t3 = getSysRunTime();
++		LIBMTP_file_t *mtpFile = LIBMTP_Get_Files_And_Folders_ByHandle(device, objHlds.Handler[i]);
++		t4 = getSysRunTime();
++		//LogInfo("unlock 1111\n");
++		criticalLeave1();
++		//LogInfo("unlock 2222\n");
++		if((t4- t3) >= 2000)
++		{
++			if(mtpFile != NULL)
++			{
++				LogInfo("get (%s: %s) items took: %lu ms\n", path.c_str(), mtpFile->filename, (t4-t3));
++				timeoutCnt = 0;
++			}
++			else
++			{
++				LogInfo("get (%s: NULL) items took: %lu ms\n", path.c_str(), (t4-t3));
++
++				if((t4-t3) >= 50000)
++				{
++					timeoutCnt++;
++				}
++
++				//for Samsung s7 and s9, there is a 
++				if(timeoutCnt >= 2) 
++				{
++					LogWarning("can not get: %s items, skip it\n", path.c_str());
++					break;
++				}
++			}
++			
++		}
++        
++        while(mtpFile != NULL)
++        {
++			if(m_lastMode_sync_done && !lastModePath.empty())
++			{
++				LogInfo("----lastmode scan done----");
++				break;
++			}
++
++			if(device == NULL) break;
++            LIBMTP_file_t *tmpFile = mtpFile;
++            
++            if(tmpFile->filetype == LIBMTP_FILETYPE_FOLDER)
++            {
++                string folderPath = path + "/" + tmpFile->filename;
++
++                //LogInfo("-----folder: %s, path: %s, size: %llu---------\n", tmpFile->filename, folderPath.c_str(), tmpFile->filesize);
++                if(ignoreFolder(tmpFile->filename) == true)
++                {
++					LogInfo("-----ignore folder: %s---------\n", tmpFile->filename);
++                }
++                else
++                {  
++					if( lastModePath.empty() || (!lastModePath.empty() && !lastModePath.find(folderPath)) )
++					{
++						parentDir->addDir(TypeDir(tmpFile));
++               			getAllFolderAndFiles(device, storage, tmpFile->item_id, folderPath, lastModePath);
++					}
++					else
++					{
++						LogInfo("-----lastmode skip folder: %s---------\n", tmpFile->filename);
++					}
++                }
++            }
++            else
++            {
++                string filePath = path + "/" + tmpFile->filename;
++                //LogInfo("-----file: %s, path: %s---------\n", tmpFile->filename, filePath.c_str());
++
++                //save into db 
++				int fileType = getMediaFileType(tmpFile);
++                if(fileType)
++                {
++                    //LogInfo("writeFileID, filePath: %s", filePath.c_str());
++					parentDir->addFile(TypeFile(tmpFile));
++					#ifdef MTP_HAS_DB
++                    writeFileID(filePath, tmpFile->item_id, mUUID);
++					#endif
++
++					criticalEnter1();
++					LIBMTP_track_t *deviceTrack = LIBMTP_Get_Trackmetadata(m_device, tmpFile->item_id);
++					criticalLeave1();
++
++					smtpfs_trackInfo smtpfsTrack;
++					memset(&smtpfsTrack, 0x00, sizeof(smtpfs_trackInfo));
++					if(deviceTrack)
++					{
++						//LogInfo("have track info");
++						fillTrackInfo(&smtpfsTrack, deviceTrack, filePath.c_str(), fileType);
++					}
++					else
++					{
++						//LogInfo("no track info");
++						fillTrackInfoByFile(&smtpfsTrack, tmpFile, filePath.c_str(), fileType);
++					}
++					
++					if(deviceTrack) 
++					{
++						criticalEnter1();
++						LIBMTP_destroy_track_t(deviceTrack);
++						criticalLeave1();
++					}
++					
++					if(lastModePath.empty() && (m_lastmode_path != filePath))
++					{
++						m_trackMetaList.push_back(smtpfsTrack);
++					}
++
++					if(!lastModePath.empty() && (lastModePath == filePath))
++					{
++						m_trackMetaList.push_back(smtpfsTrack);
++						LogInfo("----find lastModePath: %s---", lastModePath.c_str());
++						m_lastMode_sync_done = true;
++						break;
++					}
++                }
++            }
++
++			mtpFile = tmpFile->next;
++			criticalEnter1();
++			LIBMTP_destroy_file_t(tmpFile);
++			criticalLeave1();
++        }
++
++		if(m_lastMode_sync_done && !lastModePath.empty())
++		{
++			LogInfo("----lastmode scan done----");
++			break;
++		}
++    }
++
++	criticalEnter1();
++	LIBMTP_Free_ObjHandles(&objHlds);
++	criticalLeave1();
++	parentDir->setFetched();
++   
++   return 0;
++}
++
++int32_t MTPDevice::autoListAll()
++{
++    if(m_device == NULL)
++    {
++        LogError("m_device is NULL\n");
++        return -1;
++    }
++
++	LogInfo("enter\n");
++
++    LIBMTP_devicestorage_t *storage = NULL;
++    string path = "/";
++
++
++	long whole_t1 = getSysRunTime();
++
++    dirFetchContentFromCache(path);
++
++	m_lastMode_sync_done = false;
++
++	//check if sync lastmode firstly
++	if(!m_lastmode_path.empty() && (m_lastmode_path != path))
++	{
++		for(storage = m_device->storage; storage != 0; storage = storage->next) 
++		{
++			//get all items
++			LogInfo( "start lastmode scan Storage: %s\n", storage->StorageDescription);
++			string tmpPath = path + storage->StorageDescription;
++
++			if(m_lastmode_path.find(tmpPath))
++			{
++				LogInfo( "lastmode, m_lastmode_path: %s, tmpPath: %s\n", m_lastmode_path.c_str(), tmpPath.c_str());
++				continue;
++			}
++
++			long t1 = getSysRunTime();
++			
++			if(m_device)
++			{
++				getAllFolderAndFiles(m_device, storage, LIBMTP_FILES_AND_FOLDERS_ROOT, tmpPath, m_lastmode_path);
++			}
++			long t2 = getSysRunTime();
++			
++			LogInfo( "end lastmode scan Storage: %s, storage->id: %x, took: %lu ms\n", storage->StorageDescription, storage->id, (t2 - t1));
++		}
++	}
++
++    for(storage = m_device->storage; storage != 0; storage = storage->next) 
++    {
++		long t1 = getSysRunTime();
++        //get all items
++		LogInfo( "start scan Storage: %s\n", storage->StorageDescription);
++        string tmpPath = path + storage->StorageDescription;
++		if(m_device)
++		{
++			getAllFolderAndFiles(m_device, storage, LIBMTP_FILES_AND_FOLDERS_ROOT, tmpPath);
++		}
++		long t2 = getSysRunTime();
++        
++        LogInfo( "end scan Storage: %s, storage->id: %x, took: %lu ms\n", storage->StorageDescription, storage->id, (t2 - t1));
++    }
++
++	m_list_all_done = 1;
++
++	long whole_t2 = getSysRunTime();
++
++    LogInfo("scan whole phone took: %lu ms, total file: %d\n", (whole_t2 - whole_t1), m_trackMetaList.size());
++
++    return 0;
++}
++
++
++static void* autoScanItemsRun(void *arg)
++{
++    LogInfo("enter");
++	if(!gMTPDev)
++	{
++		LogInfo("gMTPDev is NULL");
++		return NULL;
++	}
++
++    setThreadPriority(20);
++
++    do
++    {
++      LogInfo("wait sem");
++      sem_wait(&gMTPDev->device_connect_sem);
++      LogInfo("wait sem, reach");
++      if(gMTPDev) gMTPDev->autoListAll();
++    }while(0);
++
++    LogInfo("exit");
++    
++    return NULL;
++}
++
++int MTPDevice::launchTasks()
++{
++   LogInfo("enter");
++
++   if(!scanThreadRun)
++   {
++		//detached thread
++		pthread_attr_t attr;
++		int ret = 0;
++		pthread_t pid; 
++
++		pthread_attr_init(&attr);
++
++		ret = pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
++		if(ret)
++		{
++			LogInfo("pthread_attr_setdetachstate fail");
++			return -1;
++		}
++
++		scanThreadRun = true;
++		ret = pthread_create(&pid, &attr, autoScanItemsRun, this);
++		if(ret)
++		{
++			LogError("pthread_create failed\n");
++			return -1;
++		}
++
++		pthread_attr_destroy(&attr);
++   }
++
++   LogInfo("exit");
++   return 0;
++}
++
++void MTPDevice::printTrackInfo(const smtpfs_trackInfo *track)
++{
++	if(track == NULL) return;
++
++	LogInfo("---------------track Info-------------");
++
++	string typeStr = "unknown";
++	if(track->type == MTP_FILE_TYPE_AUDIO)
++	{
++		typeStr = "audio";
++	}
++	else if(track->type == MTP_FILE_TYPE_VIDEO)
++	{
++		typeStr = "video";
++	}
++	else if(track->type == MTP_FILE_TYPE_IMAGE)
++	{
++		typeStr = "image";
++	}
++	else if(track->type == MTP_FILE_TYPE_PLAYLIST)
++	{
++		typeStr = "playlist";
++	}
++	else if(track->type == MTP_FILE_TYPE_AUDIOBOOKS)
++	{
++		typeStr = "audiobooks";
++	}
++	else
++	{
++		typeStr = "unknown";
++	}
++
++	LogInfo("path: %s", track->path);
++	LogInfo("type: %s", typeStr.c_str());
++	LogInfo("title: %s", track->title);
++	LogInfo("artist: %s", track->artist);
++	//LogInfo("composer: %s", track->composer);
++	LogInfo("genre: %s", track->genre);
++	LogInfo("album: %s", track->album);
++	LogInfo("duration: %u", track->duration);
++	LogInfo("samplerate: %u", track->samplerate);
++	LogInfo("nochannels: %u", track->nochannels);
++	LogInfo("wavecodec: %u", track->wavecodec);
++	LogInfo("bitrate: %u", track->bitrate);
++	LogInfo("filesize: %llu", track->filesize);
++	LogInfo("modificationdate: %lu", track->modificationdate);
++   LogInfo("tracknumber: %d", track->tracknumber);
++	LogInfo("rating: %d", track->rating);
++
++}
++
++int MTPDevice::fillTrackInfo(smtpfs_trackInfo *dst, const LIBMTP_track_t *src, const char *path, int type)
++{
++	const char *ignoreKey = "<unknown>";
++	if(!dst || !path || !src)
++	{
++		LogError("dst or path is NULL");
++		return -1;
++	}
++
++	dst->type = type;
++
++	if(path)
++		strncpy(dst->path, path, (sizeof(dst->path) - 1));
++
++	// if(src->filename)
++	// 	strncpy(dst->fileName, src->filename, (sizeof(dst->fileName) - 1));
++
++	if(src->title)
++		strncpy(dst->title, src->title, (sizeof(dst->title) - 1));
++
++	if(src->artist && strcmp(src->artist, ignoreKey))
++		strncpy(dst->artist, src->artist, (sizeof(dst->artist) - 1));
++
++	// if(src->composer)
++	// 	strncpy(dst->composer, src->composer, (sizeof(dst->composer) - 1));
++
++	if(src->genre && strcmp(src->genre, ignoreKey))
++		strncpy(dst->genre, src->genre, (sizeof(dst->genre) - 1));
++
++	if(src->album && strcmp(src->album, ignoreKey))
++		strncpy(dst->album, src->album, (sizeof(dst->album) - 1));
++
++	dst->duration = src->duration;
++	dst->samplerate = src->samplerate;
++	dst->nochannels = src->nochannels;
++	dst->wavecodec = src->wavecodec;
++	dst->bitrate = src->bitrate;
++	dst->filesize = src->filesize;
++	dst->modificationdate = src->modificationdate;
++   dst->tracknumber = src->tracknumber;
++   dst->rating = src->rating;
++
++	//printTrackInfo(dst);
++
++	return 0;
++}
++
++int MTPDevice::fillTrackInfoByFile(smtpfs_trackInfo *dst, const LIBMTP_file_t *src, const char *path, int type)
++{
++	if(!dst || !path || !src)
++	{
++		LogError("dst or path is NULL");
++		return -1;
++	}
++
++	dst->type = type;
++
++	if(path)
++		strncpy(dst->path, path, (sizeof(dst->path) - 1));
++
++	dst->filesize = src->filesize;
++	dst->modificationdate = src->modificationdate;
++
++	//printTrackInfo(dst);
++
++	return 0;
++}
++
++int MTPDevice::getEvent(char *buf, uint32_t bufLen)
++{
++	if(!buf || (bufLen < (int)sizeof(smtpfs_event)))
++	{
++		LogError("buf: %p, bufLen: %d", buf, bufLen);
++		return -1;
++	}
++
++	//event header
++	int dataLen = 0;
++	
++	smtpfs_event *pEvent = (smtpfs_event *)buf;
++
++	if(!isIndexingDone)
++	{
++		//LogInfo(" track list");
++		if( bufLen < (sizeof(smtpfs_event) + sizeof(smtpfs_trackList) + sizeof(smtpfs_trackInfo)) )
++		{
++			LogError("bufLen[%u] is too small", bufLen);
++			return -1;
++		}
++
++		if(!m_list_all_done && (m_trackList_offset >= m_trackMetaList.size()))
++		{
++			//LogError("m_trackList_offset: %d >= total: %d", m_trackList_offset, m_trackMetaList.size());
++			if(m_list_all_done)
++			{
++				LogInfo("set isIndexingDone == ture done");
++				isIndexingDone = true;
++				m_trackMetaList.clear();
++				vector<smtpfs_trackInfo>().swap(m_trackMetaList);
++				return -1;
++			}
++			return 0;
++		}
++
++		uint32_t trackNum = (bufLen - sizeof(smtpfs_event) - sizeof(smtpfs_trackList))/sizeof(smtpfs_trackInfo);
++
++		//LogInfo("-----trackList, trackNum: %d------------", trackNum);
++
++		//fill event header
++		pEvent->eventType = SMTPFS_EVENT_TRACKLIST;
++		dataLen += sizeof(smtpfs_event);
++
++		//fill smtpfs_trackList
++		smtpfs_trackList *trackListHeader = (smtpfs_trackList *)(buf + dataLen);
++		trackListHeader->fragment = 1;
++		dataLen += sizeof(smtpfs_trackList);
++
++		uint32_t total = m_trackMetaList.size();
++		uint32_t i = 0, sum = 0;
++		for(i = m_trackList_offset; i < total && sum < trackNum; i++, sum++)
++		{
++			//LogInfo("-----trackList, sum: %d------------", sum);
++			//fill track info
++			smtpfs_trackInfo *track = (smtpfs_trackInfo *)(buf + dataLen + sum*sizeof(smtpfs_trackInfo));
++
++			*track = m_trackMetaList[i];
++
++			//printTrackInfoprintTrackInfo(track);
++		}
++
++		//LogInfo("-----trackList, sum: %d, total: %d, m_trackList_offset: %d, trackNum: %d------------", sum, total, m_trackList_offset, trackNum);
++
++		dataLen += sum*sizeof(smtpfs_trackInfo);
++
++		m_trackList_offset = i;
++
++		pEvent->len = dataLen;
++		
++		if(m_list_all_done && (m_trackList_offset >= m_trackMetaList.size()))
++		{
++			trackListHeader->fragment = 0;
++			LogInfo("isIndexingDone is true");
++			isIndexingDone = true;
++			m_trackMetaList.clear();
++			vector<smtpfs_trackInfo>().swap(m_trackMetaList);
++		}
++
++		trackListHeader->count = sum;
++		//LogInfo("bufLen: %u, dataLen: %d", bufLen, dataLen);
++	}
++
++	//LogInfo("dataLen: %d", dataLen);
++
++	return dataLen;
++}
++
++
++int MTPDevice::setEvent(char *buf, uint32_t bufLen)
++{
++	if(!buf || (bufLen < (int)sizeof(smtpfs_event)))
++	{
++		LogError("buf: %p, bufLen: %d", buf, bufLen);
++		return -1;
++	}
++
++	//event header
++	smtpfs_event *pEvent = (smtpfs_event *)buf;
++	if(!pEvent)
++	{
++		LogError("pEvent is NULL");
++		return -1;
++	}
++
++	if(pEvent->eventType == SMTPFS_EVENT_SYNC_LASTMODE)
++	{
++		smtpfs_sync_lastmode *lastModeEvent = (smtpfs_sync_lastmode *)(buf + sizeof(smtpfs_event));
++		if(!lastModeEvent)
++		{
++			LogError("lastModeEvent is NULL");
++			return -1;
++		}
++
++		setLastModeSyncPath(lastModeEvent->path);
++	}
++
++	return 0;
++}
++
++
++int MTPDevice::setLastModeSyncPath(string path)
++{
++	if(path.empty())
++	{
++		LogError("path is empty");
++		return -1;
++	}
++
++	LogInfo("lastmode path: %s", path.c_str());
++
++	m_lastmode_path = path;
++
++	sem_post(&device_connect_sem);
++
++	return 0;
++}
+diff --git a/src/simple-mtpfs-mtp-device.h b/src/simple-mtpfs-mtp-device.h
+index a2964ac..4d57e12 100755
+--- a/src/simple-mtpfs-mtp-device.h
++++ b/src/simple-mtpfs-mtp-device.h
+@@ -23,14 +23,23 @@
+ #include <stack>
+ #include <string>
+ #include <vector>
++#include <semaphore.h>
+ extern "C" {
+ #include <libmtp.h>
+ }
+ #include "simple-mtpfs-type-dir.h"
+ #include "simple-mtpfs-type-file.h"
+ #include "simple-mtpfs-db.hpp"
++#include "simple-mtpfs-ringbuf.h"
++#include "simple-mtpfs-util.h"
+ 
++//#define MTP_HAS_DB
++
++#ifdef MTP_HAS_DB
+ class MTPDevice : public SIMPLE_DB
++#else
++class MTPDevice
++#endif
+ {
+ public:
+     class Capabilities
+@@ -78,11 +87,11 @@ public:
+     const TypeDir *dirFetchContentFromCache(std::string path);
+     
+     //the item type: 0 unknown, 1:folder, 2:file
+-    #define MTP_ITEMTYPE_UNKOWN (0)
+-    #define MTP_ITEMTYPE_FOLDER (1)
+-    #define MTP_ITEMTYPE_FILE (2)
+-    const TypeDir *dirFetchContent(std::string path, int *itemType);
+-    int dirFetchCount(std::string path);
++    //#define MTP_ITEMTYPE_UNKOWN (0)
++    //#define MTP_ITEMTYPE_FOLDER (1)
++    //#define MTP_ITEMTYPE_FILE (2)
++    //const TypeDir *dirFetchContent(std::string path, int *itemType);
++    //int dirFetchCount(std::string path);
+ 
+     int rename(const std::string &oldpath, const std::string &newpath);
+ 
+@@ -90,7 +99,7 @@ public:
+     int filePush(const std::string &src, const std::string &dst);
+     int fileRemove(const std::string &path);
+     int fileRename(const std::string &oldpath, const std::string &newpath);
+-	 int filesplitPull(const std::string &src,const std::string &dst,uint32_t size, uint32_t offset,unsigned char* buf);
++	int filesplitPull(const std::string &src,const std::string &dst,uint32_t size, uint32_t offset,unsigned char* buf);
+     Capabilities getCapabilities() const;
+ 
+     static bool listDevices(bool verbose, const std::string &dev_file);
+@@ -98,6 +107,12 @@ public:
+     int32_t getFileInfoById(uint32_t id, struct stat *st);
+     void criticalEnter1() { m_device_mutex.lock(); }
+     void criticalLeave1() { m_device_mutex.unlock(); }
++    bool isFileExist(const uint32_t id);
++    int32_t autoListAll();
++    int getEvent(char *buf, uint32_t bufLen);
++	int setEvent(char *buf, uint32_t bufLen);
++    int launchTasks();
++    bool indexingDone(){return isIndexingDone;};
+ 
+ private:
+ 
+@@ -110,18 +125,51 @@ private:
+ #endif
+ 
+     bool enumStorages();
+-
+     static Capabilities getCapabilities(const MTPDevice &device);
+     bool connect_priv(int dev_no, const std::string &dev_file);
++    int getAllFolderAndFiles(LIBMTP_mtpdevice_t *device, LIBMTP_devicestorage_t *storage, const uint32_t id, string &path, const string &lastModePath = "");
++    int readByRingBuf(const uint32_t id, const uint64_t fileSize, const uint32_t size, const uint32_t offset, const unsigned char* buf);
++    void printTrackInfo(const smtpfs_trackInfo *track);
++    int fillTrackInfo(smtpfs_trackInfo *dst, const LIBMTP_track_t *src, const char *path, int type);
++    int fillTrackInfoByFile(smtpfs_trackInfo *dst, const LIBMTP_file_t *src, const char *path, int type);
++    int getMediaFileType(LIBMTP_file_t *mtpFile);
++	int setLastModeSyncPath(string path);
+ 
+ private:
+-    LIBMTP_mtpdevice_t *m_device;
+-    Capabilities m_capabilities;
+-    std::mutex m_device_mutex;
+-    TypeDir  m_root_dir;
+-    bool m_move_enabled;
+-    static uint32_t s_root_node;
+-    string mUUID;
++	LIBMTP_mtpdevice_t *m_device;
++	Capabilities m_capabilities;
++	std::mutex m_device_mutex;
++	TypeDir  m_root_dir;
++	bool m_move_enabled;
++	static uint32_t s_root_node;
++	string mUUID;
++	int m_list_all_done;
++	int m_read_data_cmd_coming;
++	RingBuffer *m_rbuf;
++	//below variable is used for current playing file
++	string m_fileName;
++	uint32_t m_fileId;
++	uint64_t m_fileSize;
++	uint64_t m_fileOffset;
++
++	//for event notify
++	uint32_t m_trackList_offset;
++	std::vector<smtpfs_trackInfo> m_trackMetaList;
++
++	// for thread flag
++	bool scanThreadRun;
++	//scan track done
++	bool isIndexingDone;
++	//last mode path
++	string m_lastmode_path;
++
++   //lastmode sync done
++   bool m_lastMode_sync_done;
++
++public:
++	//for device connected
++	sem_t device_connect_sem;
++
+ };
+ 
+ #endif // SMTPFS_MTP_DEVICE_H
+diff --git a/src/simple-mtpfs-ringbuf.cpp b/src/simple-mtpfs-ringbuf.cpp
+new file mode 100755
+index 0000000..7df6e84
+--- /dev/null
++++ b/src/simple-mtpfs-ringbuf.cpp
+@@ -0,0 +1,177 @@
++/**
++  ******************************************************************************
++  * @file    RingBuffer.c
++  * @author  XinLi
++  * @version v1.1
++  * @date    15-January-2018
++  * @brief   Ring buffer module source file.
++  ******************************************************************************
++  * @attention
++  *
++  * <h2><center>Copyright &copy; 2018 XinLi</center></h2>
++  *
++  * This program is free software: you can redistribute it and/or modify
++  * it under the terms of the GNU General Public License as published by
++  * the Free Software Foundation, either version 3 of the License, or
++  * (at your option) any later version.
++  *
++  * This program is distributed in the hope that it will be useful,
++  * but WITHOUT ANY WARRANTY; without even the implied warranty of
++  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++  * GNU General Public License for more details.
++  *
++  * You should have received a copy of the GNU General Public License
++  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
++  *
++  ******************************************************************************
++  */
++
++/* Header includes -----------------------------------------------------------*/
++#include "simple-mtpfs-ringbuf.h"
++#include <string.h>
++
++/* Macro definitions ---------------------------------------------------------*/
++#define min(a, b)  (((a) < (b)) ? (a) : (b))
++
++/* Type definitions ----------------------------------------------------------*/
++/* Variable declarations -----------------------------------------------------*/
++/* Variable definitions ------------------------------------------------------*/
++/* Function declarations -----------------------------------------------------*/
++static bool is_power_of_2(uint32_t x);
++static uint32_t roundup_pow_of_two(uint32_t x);
++
++/* Function definitions ------------------------------------------------------*/
++
++/**
++  * @brief  Allocates a new FIFO and its internal buffer.
++  * @param  [in] size: The size of the internal buffer to be allocated.
++  * @note   The size will be rounded-up to a power of 2.
++  * @return RingBuffer pointer.
++  */
++RingBuffer *RingBuffer_Malloc(uint32_t size)
++{
++  RingBuffer *fifo = (RingBuffer *)RING_BUFFER_MALLOC(sizeof(RingBuffer));
++
++  if(fifo != NULL)
++  {
++    if(is_power_of_2(size) != true)
++    {
++      if(size > 0x80000000UL)
++      {
++        RING_BUFFER_FREE(fifo);
++        return NULL;
++      }
++
++      size = roundup_pow_of_two(size);
++    }
++
++    fifo->buffer = (uint8_t *)RING_BUFFER_MALLOC(size);
++
++    if(fifo->buffer == NULL)
++    {
++      RING_BUFFER_FREE(fifo);
++      return NULL;
++    }
++
++    fifo->size = size;
++    fifo->in = fifo->out = 0;
++  }
++
++  return fifo;
++}
++
++/**
++  * @brief  Frees the FIFO.
++  * @param  [in] fifo: The fifo to be freed.
++  * @return None.
++  */
++void RingBuffer_Free(RingBuffer *fifo)
++{
++  RING_BUFFER_FREE(fifo->buffer);
++  RING_BUFFER_FREE(fifo);
++}
++
++/**
++  * @brief  Puts some data into the FIFO.
++  * @param  [in] fifo: The fifo to be used.
++  * @param  [in] in:   The data to be added.
++  * @param  [in] len:  The length of the data to be added.
++  * @return The number of bytes copied.
++  * @note   This function copies at most @len bytes from the @in into
++  *         the FIFO depending on the free space, and returns the number
++  *         of bytes copied.
++  */
++uint32_t RingBuffer_In(RingBuffer *fifo, void *in, uint32_t len)
++{
++  len = min(len, RingBuffer_Avail(fifo));
++
++  /* First put the data starting from fifo->in to buffer end. */
++  uint32_t l = min(len, fifo->size - (fifo->in & (fifo->size - 1)));
++  memcpy(fifo->buffer + (fifo->in & (fifo->size - 1)), in, l);
++
++  /* Then put the rest (if any) at the beginning of the buffer. */
++  memcpy(fifo->buffer, (uint8_t *)in + l, len - l);
++
++  fifo->in += len;
++
++  return len;
++}
++
++/**
++  * @brief  Gets some data from the FIFO.
++  * @param  [in] fifo: The fifo to be used.
++  * @param  [in] out:  Where the data must be copied.
++  * @param  [in] len:  The size of the destination buffer.
++  * @return The number of copied bytes.
++  * @note   This function copies at most @len bytes from the FIFO into
++  *         the @out and returns the number of copied bytes.
++  */
++uint32_t RingBuffer_Out(RingBuffer *fifo, void *out, uint32_t len)
++{
++  len = min(len, RingBuffer_Len(fifo));
++
++  /* First get the data from fifo->out until the end of the buffer. */
++  uint32_t l = min(len, fifo->size - (fifo->out & (fifo->size - 1)));
++  memcpy(out, fifo->buffer + (fifo->out & (fifo->size - 1)), l);
++
++  /* Then get the rest (if any) from the beginning of the buffer. */
++  memcpy((uint8_t *)out + l, fifo->buffer, len - l);
++
++  fifo->out += len;
++
++  return len;
++}
++
++/**
++  * @brief  Determine whether some value is a power of two.
++  * @param  [in] x: The number to be confirmed.
++  * @retval true:   Yes.
++  * @retval false:  No.
++  * @note   Where zero is not considered a power of two.
++  */
++static bool is_power_of_2(uint32_t x)
++{
++  return (x != 0) && ((x & (x - 1)) == 0);
++}
++
++/**
++  * @brief  Round the given value up to nearest power of two.
++  * @param  [in] x: The number to be converted.
++  * @return The power of two.
++  */
++static uint32_t roundup_pow_of_two(uint32_t x)
++{
++  uint32_t b = 0;
++
++  for(int i = 0; i < 32; i++)
++  {
++    b = 1UL << i;
++
++    if(x <= b)
++    {
++      break;
++    }
++  }
++
++  return b;
++}
+\ No newline at end of file
+diff --git a/src/simple-mtpfs-ringbuf.cpp.old b/src/simple-mtpfs-ringbuf.cpp.old
+new file mode 100755
+index 0000000..c0fed54
+--- /dev/null
++++ b/src/simple-mtpfs-ringbuf.cpp.old
+@@ -0,0 +1,232 @@
++#include "simple-mtpfs-ringbuf.h"
++#include <cstring>
++
++extern RingBuffer RingBufferCreate(size_t size)
++{
++    size_t totalSize = sizeof(struct s_ringBuffer) + size;
++    char *p = (char *)malloc(totalSize);
++    RingBuffer buffer = (RingBuffer)p;
++    buffer->buffer = p + sizeof(struct s_ringBuffer);
++    buffer->size = size;
++    RingBufferReset(buffer);
++    return buffer;
++}
++
++void RingBufferFree(RingBuffer rBuf)
++{
++    RingBufferReset(rBuf);
++    rBuf->size = 0;
++    rBuf->dataSize = 0;
++    rBuf->buffer = NULL;
++    free(rBuf);
++}
++
++void RingBufferReset(RingBuffer rBuf)
++{
++    rBuf->headOffset = -1;
++    rBuf->tailOffset = -1;
++    rBuf->dataSize = 0;
++}
++
++size_t RingBufferGetCapacity(RingBuffer rBuf) 
++{
++    return rBuf->size;
++}
++
++size_t RingBufferGetSize(RingBuffer rBuf)
++{
++    return rBuf->size;
++}
++
++size_t RingBufferGetDataSize(RingBuffer rBuf)
++{
++    return rBuf->dataSize;
++}
++
++void RingBufferPush(RingBuffer rBuf,char *src, size_t length)
++{
++    if(length == 0)
++        return; 
++
++    size_t writableLen = length;
++    char *pSrc = src;
++    
++    if(writableLen > rBuf->size)//in case of size overflow
++    {
++        size_t overFlowLen = writableLen - rBuf->size;
++        writableLen = rBuf->size;
++        pSrc = src + overFlowLen;
++    }
++    
++    
++    bool resetHead = false;
++    //in case the circle buffer won't be full after adding the data
++    if(rBuf->tailOffset+writableLen < rBuf->size)
++    {
++        memcpy(&rBuf->buffer[rBuf->tailOffset + 1], pSrc, writableLen);
++        
++        if((rBuf->tailOffset < rBuf->headOffset) && (rBuf->tailOffset+writableLen >= rBuf->headOffset) )
++            resetHead = true;
++        
++        rBuf->tailOffset += writableLen;
++    }
++    else//in case the circle buffer will be overflow after adding the data
++    {
++        size_t remainSize = rBuf->size - rBuf->tailOffset - 1; //the remain size
++        if(remainSize || (rBuf->tailOffset+1) < rBuf->size)
++      		memcpy(&rBuf->buffer[rBuf->tailOffset+1], pSrc, remainSize);
++        
++        size_t coverSize = writableLen - remainSize; //size of data to be covered from the beginning
++        memcpy(rBuf->buffer, pSrc+remainSize, coverSize);
++        
++        if(rBuf->tailOffset < rBuf->headOffset)
++            resetHead = true;
++        else
++        {
++            if(coverSize>rBuf->headOffset)
++                resetHead = true;
++        }
++        
++        rBuf->tailOffset = coverSize - 1;
++    }
++    
++    if(rBuf->headOffset == (size_t)-1)
++        rBuf->headOffset = 0;
++    
++    if(resetHead)
++    {
++        if(rBuf->tailOffset+1 < rBuf->size)
++            rBuf->headOffset = rBuf->tailOffset + 1;
++        else
++            rBuf->headOffset = 0;
++        
++        rBuf->dataSize = rBuf->size;
++    }
++    else
++    {
++        if(rBuf->tailOffset >= rBuf->headOffset)
++            rBuf->dataSize = rBuf->tailOffset - rBuf->headOffset + 1;
++        else
++            rBuf->dataSize = rBuf->size - (rBuf->headOffset - rBuf->tailOffset - 1);
++    }
++}
++
++size_t inter_circularBuffer_read(RingBuffer rBuf, size_t length, char *dataOut, bool resetHead)
++{
++    if(rBuf->dataSize == 0 || length == 0)
++        return 0;
++    
++    size_t rdLen = length;
++    
++    if(rBuf->dataSize < rdLen)
++        rdLen = rBuf->dataSize;
++    
++    
++    if(rBuf->headOffset <= rBuf->tailOffset)
++    {
++        if(dataOut)
++            memcpy(dataOut, &rBuf->buffer[rBuf->headOffset], rdLen);
++        
++        if(resetHead)
++        {
++            rBuf->headOffset += rdLen;
++            if(rBuf->headOffset > rBuf->tailOffset)
++            {
++                rBuf->headOffset = -1;
++                rBuf->tailOffset = -1;
++            }
++        }
++    }
++    else
++    {
++        if(rBuf->headOffset+rdLen <= rBuf->size)
++        {
++            if(dataOut)
++                memcpy(dataOut, &rBuf->buffer[rBuf->headOffset], rdLen);
++            
++            if(resetHead)
++            {
++                rBuf->headOffset += rdLen;
++                if(rBuf->headOffset == rBuf->size)
++                    rBuf->headOffset = 0;
++            }
++        }
++        else
++        {
++            size_t frg1Len = rBuf->size - rBuf->headOffset;
++            if(dataOut)
++                memcpy(dataOut, &rBuf->buffer[rBuf->headOffset], frg1Len);
++            
++            size_t frg2len = rdLen - frg1Len;
++            if(dataOut)
++                memcpy(dataOut+frg1Len, rBuf->buffer, frg2len);
++            
++            if(resetHead)
++            {
++                rBuf->headOffset = frg2len;
++                if(rBuf->headOffset > rBuf->tailOffset)
++                {
++                    rBuf->headOffset = -1;
++                    rBuf->tailOffset = -1;
++                }
++            }
++        }
++    }
++    
++    if(resetHead)
++        rBuf->dataSize -= rdLen;
++    
++    return rdLen;
++}
++
++
++size_t RingBufferPop(RingBuffer rBuf, size_t length, char *dataOut)
++{
++    return inter_circularBuffer_read(rBuf,length,dataOut,true);
++}
++
++size_t RingBufferRead(RingBuffer rBuf, size_t length, char *dataOut)
++{
++    return inter_circularBuffer_read(rBuf,length,dataOut,false);
++}
++
++
++//print circular buffer's content into str,
++void RingBufferPrint(RingBuffer rBuf, bool hex)
++{
++    char *b = rBuf->buffer;
++    size_t cSize = RingBufferGetSize(rBuf);
++    char *str = (char *)malloc(2*cSize+1);
++    
++    char c;
++    
++    for(size_t i=0; i<cSize; i++)
++    {
++        if(RingBufferGetDataSize(rBuf) == 0)
++        {
++            c = '_';
++        }
++        else if (rBuf->tailOffset < rBuf->headOffset)
++        {
++            if(i>rBuf->tailOffset && i<rBuf->headOffset)
++                c = '_';
++            else
++              c = b[i];
++        }
++        else
++        {
++            if(i>rBuf->tailOffset || i<rBuf->headOffset)
++                c = '_';
++            else
++                c = b[i];
++        }
++        if(hex)
++            sprintf(str+i*2, "%02X|",c);
++        else
++            sprintf(str+i*2, "%c|",c);
++    }
++    
++    printf("RingBuffer: %s <size %zu dataSize:%zu>\n",str,RingBufferGetSize(rBuf),RingBufferGetDataSize(rBuf));
++    
++    free(str);
++}
+diff --git a/src/simple-mtpfs-ringbuf.h b/src/simple-mtpfs-ringbuf.h
+new file mode 100755
+index 0000000..6659b2d
+--- /dev/null
++++ b/src/simple-mtpfs-ringbuf.h
+@@ -0,0 +1,131 @@
++/**
++  ******************************************************************************
++  * @file    RingBuffer.h
++  * @author  XinLi
++  * @version v1.1
++  * @date    15-January-2018
++  * @brief   Header file for RingBuffer.c module.
++  ******************************************************************************
++  * @attention
++  *
++  * <h2><center>Copyright &copy; 2018 XinLi</center></h2>
++  *
++  * This program is free software: you can redistribute it and/or modify
++  * it under the terms of the GNU General Public License as published by
++  * the Free Software Foundation, either version 3 of the License, or
++  * (at your option) any later version.
++  *
++  * This program is distributed in the hope that it will be useful,
++  * but WITHOUT ANY WARRANTY; without even the implied warranty of
++  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++  * GNU General Public License for more details.
++  *
++  * You should have received a copy of the GNU General Public License
++  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
++  *
++  ******************************************************************************
++  */
++
++#ifndef SMTPFS_RINGBUF_H
++#define SMTPFS_RINGBUF_H
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++/* Header includes -----------------------------------------------------------*/
++#include <stdint.h>
++#include <stdbool.h>
++#include <stdlib.h>
++
++/* Macro definitions ---------------------------------------------------------*/
++#define RING_BUFFER_MALLOC(size)  malloc(size)
++#define RING_BUFFER_FREE(block)   free(block)
++
++/* Type definitions ----------------------------------------------------------*/
++typedef struct
++{
++  uint8_t *buffer;
++  uint32_t size;
++  uint32_t in;
++  uint32_t out;
++}RingBuffer;
++
++/* Variable declarations -----------------------------------------------------*/
++/* Variable definitions ------------------------------------------------------*/
++/* Function declarations -----------------------------------------------------*/
++RingBuffer *RingBuffer_Malloc(uint32_t size);
++void RingBuffer_Free(RingBuffer *fifo);
++
++uint32_t RingBuffer_In(RingBuffer *fifo, void *in, uint32_t len);
++uint32_t RingBuffer_Out(RingBuffer *fifo, void *out, uint32_t len);
++
++/* Function definitions ------------------------------------------------------*/
++
++/**
++  * @brief  Removes the entire FIFO contents.
++  * @param  [in] fifo: The fifo to be emptied.
++  * @return None.
++  */
++static inline void RingBuffer_Reset(RingBuffer *fifo)
++{
++  fifo->in = fifo->out = 0;
++}
++
++/**
++  * @brief  Returns the size of the FIFO in bytes.
++  * @param  [in] fifo: The fifo to be used.
++  * @return The size of the FIFO.
++  */
++static inline uint32_t RingBuffer_Size(RingBuffer *fifo)
++{
++  return fifo->size;
++}
++
++/**
++  * @brief  Returns the number of used bytes in the FIFO.
++  * @param  [in] fifo: The fifo to be used.
++  * @return The number of used bytes.
++  */
++static inline uint32_t RingBuffer_Len(RingBuffer *fifo)
++{
++  return fifo->in - fifo->out;
++}
++
++/**
++  * @brief  Returns the number of bytes available in the FIFO.
++  * @param  [in] fifo: The fifo to be used.
++  * @return The number of bytes available.
++  */
++static inline uint32_t RingBuffer_Avail(RingBuffer *fifo)
++{
++  return RingBuffer_Size(fifo) - RingBuffer_Len(fifo);
++}
++
++/**
++  * @brief  Is the FIFO empty?
++  * @param  [in] fifo: The fifo to be used.
++  * @retval true:      Yes.
++  * @retval false:     No.
++  */
++static inline bool RingBuffer_IsEmpty(RingBuffer *fifo)
++{
++  return RingBuffer_Len(fifo) == 0;
++}
++
++/**
++  * @brief  Is the FIFO full?
++  * @param  [in] fifo: The fifo to be used.
++  * @retval true:      Yes.
++  * @retval false:     No.
++  */
++static inline bool RingBuffer_IsFull(RingBuffer *fifo)
++{
++  return RingBuffer_Avail(fifo) == 0;
++}
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif /* __RINGBUFFER_H */
+\ No newline at end of file
+diff --git a/src/simple-mtpfs-ringbuf.h.old b/src/simple-mtpfs-ringbuf.h.old
+new file mode 100755
+index 0000000..e79fa54
+--- /dev/null
++++ b/src/simple-mtpfs-ringbuf.h.old
+@@ -0,0 +1,45 @@
++#ifndef SMTPFS_RINGBUF_H
++#define SMTPFS_RINGBUF_H
++#include <stdio.h>
++#include <stdlib.h>
++#include <stdbool.h>
++
++typedef struct s_ringBuffer{
++    size_t size; //capacity bytes size
++    size_t dataSize; //occupied data size
++    size_t tailOffset; //head offset, the oldest byte position offset
++    size_t headOffset; //tail offset, the lastest byte position offset
++    char *buffer;
++} *RingBuffer;
++
++// Construct RingBuffer with ‘size' in byte. You must call RingBufferFree() in balance for destruction.
++extern RingBuffer RingBufferCreate(size_t size);
++
++// Destruct RingBuffer 
++extern void RingBufferFree(RingBuffer rBuf);
++
++// Reset the RingBuffer
++extern void RingBufferReset(RingBuffer rBuf);
++
++//get the capacity of RingBuffer
++extern size_t RingBufferGetCapacity(RingBuffer rBuf);
++
++//same as RingBufferGetCapacity, Just for compatibility with older versions
++extern size_t RingBufferGetSize(RingBuffer rBuf);
++
++//get occupied data size of RingBuffer
++extern size_t RingBufferGetDataSize(RingBuffer rBuf);
++
++// Push data to the tail of a circular buffer from 'src' with 'length' size in byte.
++extern void RingBufferPush(RingBuffer rBuf,char *src, size_t length);
++
++// Pop data from a circular buffer to 'dataOut'  with wished 'length' size in byte,return the actual data size in byte popped out,which is less or equal to the input 'length parameter.
++extern size_t RingBufferPop(RingBuffer rBuf, size_t length, char *dataOut);
++
++// Read data from a circular buffer to 'dataOut'  with wished 'length' size in byte,return the actual data size in byte popped out,which is less or equal to the input 'length parameter.
++extern size_t RingBufferRead(RingBuffer rBuf, size_t length, char *dataOut);
++
++//for test purpose, print the circular buffer's data content by printf(...); the 'hex' parameters indicates that if the data should be printed in asscii string or hex data format.
++extern void RingBufferPrint(RingBuffer rBuf, bool hex);
++
++#endif
+diff --git a/src/simple-mtpfs-type-basic.h b/src/simple-mtpfs-type-basic.h
+index 0bb33a3..f29a304 100755
+--- a/src/simple-mtpfs-type-basic.h
++++ b/src/simple-mtpfs-type-basic.h
+@@ -28,13 +28,9 @@ public:
+         m_id(0),
+         m_parent_id(0),
+         m_storage_id(0),
+-        m_name(),
+-        fetched_offset(0),
+-        item_n(0),
+-        fetched_handle_done(false)
++        m_name()
+     {
+-       handles.n = 0;
+-       handles.Handler = NULL;
++
+     }
+ 
+     TypeBasic(uint32_t id, uint32_t parent_id, uint32_t storage_id,
+@@ -42,26 +38,18 @@ public:
+         m_id(id),
+         m_parent_id(parent_id),
+         m_storage_id(storage_id),
+-        m_name(name),
+-        fetched_offset(0),
+-        item_n(0),
+-        fetched_handle_done(false)
++        m_name(name)
+     {
+-       handles.n = 0;
+-       handles.Handler = NULL;
++
+     }
+ 
+     TypeBasic(const TypeBasic &copy):
+         m_id(copy.m_id),
+         m_parent_id(copy.m_parent_id),
+         m_storage_id(copy.m_storage_id),
+-        m_name(copy.m_name),
+-        fetched_offset(copy.fetched_offset),
+-        item_n(copy.item_n),
+-        fetched_handle_done(copy.fetched_handle_done)
++        m_name(copy.m_name)
+     {
+-       handles.n = copy.handles.n;
+-       handles.Handler = copy.handles.Handler;
++
+     }
+ 
+     uint32_t id() const { return m_id; }
+@@ -80,10 +68,10 @@ public:
+         m_parent_id = rhs.m_parent_id;
+         m_storage_id = rhs.m_storage_id;
+         m_name = rhs.m_name;
+-        fetched_offset = 0;
+-        handles.n = 0;
+-        handles.Handler = NULL;
+-        fetched_handle_done = false;
++      //   fetched_offset = 0;
++      //   handles.n = 0;
++      //   handles.Handler = NULL;
++      //   fetched_handle_done = false;
+         return *this;
+     }
+ 
+@@ -92,24 +80,24 @@ public:
+     bool operator <(const std::string &rhs) const { return m_name < rhs; }
+     bool operator <(const TypeBasic &rhs) const { return m_name < rhs.m_name; }
+ 
+-    int setFetchedOffset(uint32_t offset = 0) { fetched_offset = offset; return 0;}
+-    uint32_t getFetchedOffset() const { return fetched_offset; }
+-    ObjectHandles* getObjHandles() {return &handles;}
+-    int setItemCount(uint32_t n) { item_n = n; return 0;}
+-    uint32_t getItemCount() const { return item_n; }
++    //int setFetchedOffset(uint32_t offset = 0) { fetched_offset = offset; return 0;}
++    //uint32_t getFetchedOffset() const { return fetched_offset; }
++    //ObjectHandles* getObjHandles() {return &handles;}
++    //int setItemCount(uint32_t n) { item_n = n; return 0;}
++    //uint32_t getItemCount() const { return item_n; }
+     
+-    void setFetchHandleDone(bool done) { fetched_handle_done = done;}
+-    bool getFetchHandleDone() const { return fetched_handle_done; }
++    //void setFetchHandleDone(bool done) { fetched_handle_done = done;}
++    //bool getFetchHandleDone() const { return fetched_handle_done; }
+ 
+ protected:
+     uint32_t m_id;
+     uint32_t m_parent_id;
+     uint32_t m_storage_id;
+     std::string m_name;
+-    uint32_t fetched_offset;
+-    uint32_t item_n;
+-    ObjectHandles handles;
+-    bool fetched_handle_done;
++    //uint32_t fetched_offset;
++    //uint32_t item_n;
++    //ObjectHandles handles;
++    //bool fetched_handle_done;
+ };
+ 
+ #endif // SMTPFS_TYPE_BASIC
+diff --git a/src/simple-mtpfs-util.cpp b/src/simple-mtpfs-util.cpp
+index 2827ed8..e2ffcbc 100755
+--- a/src/simple-mtpfs-util.cpp
++++ b/src/simple-mtpfs-util.cpp
+@@ -23,13 +23,15 @@
+ #  include <sstream>
+ #endif // HAVE_LIBUSB1
+ extern "C" {
+-#  include <dirent.h>
+-#  include <libgen.h>
+-#  include <limits.h>
+-#  include <stdlib.h>
+-#  include <sys/stat.h>
+-#  include <sys/types.h>
+-#  include <unistd.h>
++#include <dirent.h>
++#include <libgen.h>
++#include <limits.h>
++#include <stdlib.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <unistd.h>
++#include <time.h>
++#include <string.h>
+ }
+ #ifdef HAVE_LIBUSB1
+ #  include <climits>
+@@ -297,154 +299,210 @@ bool smtpfs_check_dir(const std::string &path)
+     return false;
+ }
+ 
+-int GetCoCPath(const char *inPath, COCMediaPathInfo *outPath)
++
++bool endWith(const string& str, const string& substr) 
+ {
+-    if(!inPath || !outPath)
+-    {
+-       LogError("invalid parameters");
+-       return -1;
+-    }
+-    
+-    memset(outPath, 0x00, sizeof(COCMediaPathInfo));
++   //check the length
++   if(str.length() <= substr.length())
++   {
++      return false;
++   }
+ 
+-    char *pos = strstr((char *)inPath, COCPREKEY);
+-    int len = 0;
+-    char *path = NULL;
+-    if(pos != NULL)
+-    {
+-       len = (pos - inPath);
+-    }
+-    else
+-    {
+-       len = strlen(inPath);
++   return str.rfind(substr) == (str.length() - substr.length());
++}
++
++
++void mytolower(string& s)
++{
++    int len=s.size();
++    for(int i=0;i<len;i++){
++        if(s[i]>='A'&&s[i]<='Z'){
++            s[i]+=32;//+32 to lowwer
++        }
+     }
+-    
+-    path = (char *)calloc(1, len+1);
+-    if(path == NULL)
+-    {
+-       LogError("calloc failed");
+-       return -1;
++}
++
++void mytoupper(string& s)
++{
++    int len=s.size();
++    for(int i=0;i<len;i++){
++        if(s[i]>='a'&&s[i]<='z'){
++            s[i]-=32;//-32 to upper
++        }
+     }
++}
+ 
+-    memcpy(path, inPath, len);
+ 
+-    //fill path
+-    outPath->path = path;
++bool isAudioType(const char *fileName)
++{
++   const char* extArray[] = 
++   {
++		".mp3",
++		".wma",
++		".aac",
++		".wav",
++		".wave",
++		".flac",
++		".oga",
++		".ogg",
++		".mka",
++    };
+ 
+-    LogInfo("path:%s", outPath->path);
++   if(fileName == NULL)
++   {
++      LogError("file name is NULL");
++      return false;
++   }
+ 
+-    //fill media type
+-    if(pos && (strstr((char *)pos, COCMEDIATYPEAUDIO) != NULL))
+-    {
+-       outPath->MediaType |= MEDIATYPEAUDIO;
+-    }
++   string str = fileName;
++   mytolower(str);
+ 
+-    if(pos && (strstr((char *)pos, COCMEDIATYPEVIDEO) != NULL))
+-    {
+-       outPath->MediaType |= MEDIATYPEVIDEO;
+-    }
+-    
+-    LogInfo("mediaType:%d", outPath->MediaType);
++   int i = 0;
++   int total = sizeof(extArray)/sizeof(char *);
++   string extStr = "";
++   for(i = 0; i < total; i++)
++   {
++      extStr = extArray[i];
++      if(endWith(str, extStr))
++      {
++         return true;
++      }
++   }
+ 
+-    //fill media count
+-    if(pos)
+-    {
+-      char *posCnt = strrchr(pos, '_');
++   return false;
++}
++
++bool isVideoType(const char *fileName)
++{
++   const char* extArray[] = 
++   {
++		".avi",
++		".asf",
++		".wmv",
++		".mkv",
++		".mebm",
++		".mpg",
++		".dat",
++		".mpeg",
++		".evo",
++		".vob",
++		".vdr",
++		".mod",
++		".ts",
++		".trp",
++		".mts",
++		".m2t",
++		".m2ts",
++		".tod",
++		".mp4",
++		".m4v",
++		".3gp",
++		".mov",
++		".qt",
++    };
++
++   if(fileName == NULL)
++   {
++      LogError("file name is NULL");
++      return false;
++   }
+ 
+-      LogDebug("posCnt:%d", posCnt);
++   string str = fileName;
++   mytolower(str);
+ 
+-      if(posCnt)
++   int i = 0;
++   int total = sizeof(extArray)/sizeof(char *);
++   string extStr = "";
++   for(i = 0; i < total; i++)
++   {
++      extStr = extArray[i];
++      if(endWith(str, extStr))
+       {
+-         if((unsigned)(posCnt+1-inPath) <= strlen(inPath))
+-         {
+-            outPath->MediaCnt = atoi(posCnt+1);
+-         }
++         return true;
+       }
+-    }
+-
+-    LogDebug("Mediacnt:%d", outPath->MediaCnt);
++   }
+ 
+-    return 0;
++   return false;
+ }
+ 
+-int FreeCoCPath(COCMediaPathInfo *outPath)
++bool isImageType(const char *fileName)
+ {
+-   if(!outPath)
++   const char* extArray[] = 
+    {
+-      return -1;
+-   }
++		".bmp",
++		".jpg",
++		".jpeg",
++		".gif",
++		".tif",
++		".png",
++    };
+ 
+-   if(outPath->path)
++   if(fileName == NULL)
+    {
+-      free(outPath->path);
++      LogError("file name is NULL");
++      return false;
+    }
+ 
+-   memset(outPath, 0x00, sizeof(COCMediaPathInfo));
++   string str = fileName;
++   mytolower(str);
+ 
+-   return 0;
+-}
++   int i = 0;
++   int total = sizeof(extArray)/sizeof(char *);
++   string extStr = "";
++   for(i = 0; i < total; i++)
++   {
++      extStr = extArray[i];
++      if(endWith(str, extStr))
++      {
++         return true;
++      }
++   }
+ 
++   return false;
++}
+ 
+-bool endWith(const string& str, const string& substr) 
++bool isPlayListType(const char *fileName)
+ {
+-   //check the length
+-   if(str.length() <= substr.length())
++   const char* extArray[] = 
++   {
++      ".m3u",
++      ".m3u8",
++      ".pls",
++      ".asx",
++      ".wpl",
++      ".xspf",
++   };
++
++   if(fileName == NULL)
+    {
++      LogError("file name is NULL");
+       return false;
+    }
+ 
+-   return str.rfind(substr) == (str.length() - substr.length());
+-}
++   string str = fileName;
++   mytolower(str);
+ 
++   int i = 0;
++   int total = sizeof(extArray)/sizeof(char *);
++   string extStr = "";
++   for(i = 0; i < total; i++)
++   {
++      extStr = extArray[i];
++      if(endWith(str, extStr))
++      {
++         return true;
++      }
++   }
+ 
+-bool isMediaType(const char *fileName)
++   return false;
++}
++
++bool isAudioBooksType(const char *fileName)
+ {
+    const char* extArray[] = 
+    {
+-      ".mp3",
+-      ".wma",
+-      ".aac",
+-      ".wav",
+-      ".wave",
+-      ".flac",
+-      ".oga",
+-      ".ogg",
+-      ".mka",
+       ".m4a",
+       ".m4b",
+-      ".avi",
+-      ".asf",
+-      ".wmv",
+-      ".mkv",
+-      ".mebm",
+-      ".mpg",
+-      ".dat",
+-      ".mpeg",
+-      ".evo",
+-      ".vob",
+-      ".vdr",
+-      ".mod",
+-      ".ts",
+-      ".trp",
+-      ".mts",
+-      ".m2t",
+-      ".m2ts",
+-      ".tod",
+-      ".mp4",
+-      ".m4v",
+-      ".3gp",
+-      ".mov",
+-      ".qt",
+-      ".bmp",
+-      ".jpg",
+-      ".jpeg",
+-      ".gif",
+-      ".tif",
+-      ".png",
+-      ".pls",
+-      ".m3u",
+-      ".wpl",
+-      ".m4b",
+    };
+ 
+    if(fileName == NULL)
+@@ -453,14 +511,16 @@ bool isMediaType(const char *fileName)
+       return false;
+    }
+ 
+-   string fileStr = fileName;
++   string str = fileName;
++   mytolower(str);
++
+    int i = 0;
+    int total = sizeof(extArray)/sizeof(char *);
+    string extStr = "";
+    for(i = 0; i < total; i++)
+    {
+       extStr = extArray[i];
+-      if(endWith(fileStr, extStr))
++      if(endWith(str, extStr))
+       {
+          return true;
+       }
+@@ -468,3 +528,127 @@ bool isMediaType(const char *fileName)
+ 
+    return false;
+ }
++
++bool isMediaType(const char *fileName)
++{
++   if(   isAudioType(fileName) 
++      || isVideoType(fileName) 
++	  || isImageType(fileName) 
++	  || isPlayListType(fileName)
++	  || isAudioBooksType(fileName)
++	)
++	{
++		return true;
++	}
++	else
++	{
++		return false;
++	}
++}
++
++int setThreadPriority(uint32_t priority)
++{
++   sched_param param;
++   int p = SCHED_RR;
++
++   //LogInfo("enter");
++
++   memset(&param, 0, sizeof(param));
++
++   if (p != SCHED_OTHER)
++   {
++      LogInfo("set FIFO, %d", priority);
++      param.sched_priority = (int)priority;
++      if (pthread_setschedparam(pthread_self(), p, &param) != 0)
++      {
++         LogError("pthread_setschedparam failed!");
++         return -1;
++      }
++   }
++
++   return 0;
++}
++
++
++bool ignoreFolder(char* name)
++{
++   //complete match
++   const char* ignoreList0[] = 
++   {
++      "data",
++      "doc",
++      "documents",
++      "document",
++   };
++
++   //partern match
++   const char* ignoreList[] = 
++   {
++      "android",
++      "navi",
++      "backup",
++      "baidu",
++      "log",
++      "tencent",
++      "qq",
++      "map",
++      "lib",
++      "tempdata",
++      "cache",
++      "360",
++      "alipay",
++      "setting",
++      "message",
++      "sdk",
++      "alarm",
++      "document",
++      "download",
++      "notification",
++      "samsung",
++      "catfish",
++      "yellowpage",
++   };
++
++   if(name == NULL)
++   {
++      LogError("name is NULL");
++      return true;
++   }
++
++   string fileStr = name;
++
++   mytolower(fileStr);
++
++   int i = 0;
++   int total = 0;
++
++   //complete match
++   total = sizeof(ignoreList0)/sizeof(char *);
++   for(i = 0; i < total; i++)
++   {
++      string str = ignoreList0[i];
++      if(str == fileStr)
++      {
++         return true;
++      }
++   }
++
++   //partern match
++   total = sizeof(ignoreList)/sizeof(char *);
++
++   for(i = 0; i < total; i++)
++   {
++      string subStr = ignoreList[i];
++      if(fileStr.length() < subStr.length())
++      {
++         continue;
++      }
++
++      if(fileStr.find(subStr.c_str()) != string::npos)
++      {
++         return true;
++      }
++   }
++
++   return false;
++}
+\ No newline at end of file
+diff --git a/src/simple-mtpfs-util.h b/src/simple-mtpfs-util.h
+index e685a6d..351c3ad 100755
+--- a/src/simple-mtpfs-util.h
++++ b/src/simple-mtpfs-util.h
+@@ -21,11 +21,21 @@
+ #include <config.h>
+ #include <cstdint>
+ #include <string>
++#include <sys/ioctl.h>
++#include <linux/limits.h>
+ 
+ #ifdef HAVE_LIBUSB1
+ #  include <libmtp.h>
+ #endif // HAVE_LIBUSB1
+ 
++// typedef char int8_t;
++// typedef unsigned char uint8_t;
++// typedef short int16_t;
++// typedef unsigned short uint16_t;
++// typedef int int32_t;
++// typedef unsigned int uint32_t;
++// typedef unsigned long long uint64_t;
++
+ class StreamHelper
+ {
+ public:
+@@ -56,30 +66,87 @@ void smtpfs_raw_device_free(LIBMTP_raw_device_t *device);
+ bool smtpfs_reset_device(LIBMTP_raw_device_t *device);
+ #endif // HAVE_LIBUSB1
+ 
+-//prefix string
+-#define COCPREKEY             "_COCMEDIAPREKEY"
+-//media type string
+-#define COCMEDIATYPEAUDIO     "_AUDIO"
+-#define COCMEDIATYPEVIDEO     "_VIDEO"
+-#define COCMEDIATYPEAV        "_AUDIO_VIDEO"
+-//media count string
+-#define COCMEDIACOUNT(n)      #n
++bool endWith(const std::string& str, const std::string& substr);
++bool isAudioType(const char *fileName);
++bool isVideoType(const char *fileName);
++bool isImageType(const char *fileName);
++bool isPlayListType(const char *fileName);
++bool isAudioBooksType(const char *fileName);
++bool isMediaType(const char *fileName);
++
++inline long getSysRunTime()
++{
++   struct timespec ts;
++   clock_gettime(CLOCK_MONOTONIC, &ts);
++   return ts.tv_sec * 1000L +
++         ts.tv_nsec / 1000000L;
++}
++
++int setThreadPriority(uint32_t priority);
++bool ignoreFolder(char* name);
+ 
+-//totle string
+-#define COCMTPSPKEY(a, b, c)  #a##b##c
++#define SMTPFS_EVENT_MAXLEN      (8*1024)//128k
+ 
+ typedef struct
+ {
+-   char *path;
+-   #define MEDIATYPEAUDIO (0x01)
+-   #define MEDIATYPEVIDEO (0x02)
+-   int   MediaType;
+-   int   MediaCnt;
+-}COCMediaPathInfo;
+-
+-int GetCoCPath(const char *inPath, COCMediaPathInfo *outPath);
+-int FreeCoCPath(COCMediaPathInfo *outPath);
+-bool endWith(const std::string& str, const std::string& substr);
+-bool isMediaType(const char *fileName);
++   #define SMTPFS_EVENT_SYNC_LASTMODE  (0x01)
++   #define SMTPFS_EVENT_TRACKLIST      (0x02)
++   int eventType;
++   int len;//include the event struct itself
++}smtpfs_event;
++
++#define MTP_PATHNAME_MAXLEN (512)
++#define MTP_METADATA_NAME_MAXLEN (128)
++typedef struct
++{ 
++   #define MTP_FILE_TYPE_UNKNOWN (0x0)
++   #define MTP_FILE_TYPE_AUDIO (0x1)
++   #define MTP_FILE_TYPE_VIDEO (0x2)
++   #define MTP_FILE_TYPE_IMAGE (0x4)
++   #define MTP_FILE_TYPE_PLAYLIST (0x8)
++   #define MTP_FILE_TYPE_AUDIOBOOKS (0x10)
++   int   type;
++   char  path[MTP_PATHNAME_MAXLEN];//folder path
++   //char  fileName[NAME_MAX];//filename
++   char  title[MTP_METADATA_NAME_MAXLEN]; /**< Track title */
++   char  artist[MTP_METADATA_NAME_MAXLEN]; /**< Name of recording artist */
++   //char  composer[NAME_MAX]; /**< Name of recording composer */
++   char  genre[MTP_METADATA_NAME_MAXLEN]; /**< Genre name for track */
++   char  album[MTP_METADATA_NAME_MAXLEN]; /**< Album name for track */
++   uint32_t duration; /**< Duration in milliseconds */
++   uint32_t samplerate; /**< Sample rate of original file, min 0x1f80 max 0xbb80 */
++   uint32_t nochannels; /**< Number of channels in this recording 0 = unknown, 1 or 2 */
++   uint32_t wavecodec; /**< FourCC wave codec name */
++   uint32_t bitrate; /**< (Average) bitrate for this file min=1 max=0x16e360 */
++   uint64_t filesize; /**< Size of track file in bytes */
++   time_t modificationdate; /**< Date of last alteration of the track */
++   uint16_t tracknumber; /**< Track number (in sequence on recording) */
++   uint16_t rating; /**< User rating 0-100 (0x00-0x64) */
++} smtpfs_trackInfo;
++
++//for track list: smtpfs_event + smtpfs_trackList + N*smtpfs_trackInfo
++typedef struct
++{
++   int   fragment;
++   int   count; 
++   smtpfs_trackInfo trackList[0];
++}smtpfs_trackList;
++
++
++//for sync lastmode: smtpfs_event + smtpfs_sync_lastmode
++typedef struct
++{
++   char path[MTP_PATHNAME_MAXLEN];
++}smtpfs_sync_lastmode;
++
++#define SMTPFSIOCTLNODE "mediaone_smtpfs_node"
++#define SMTPFSMAGIC 'm'
++
++//write  event
++#define SMTPFS_SETEVENT _IOW(SMTPFSMAGIC, 1, char[SMTPFS_EVENT_MAXLEN])
++
++//read event
++#define SMTPFS_GETEVENT _IOR(SMTPFSMAGIC, 2, char[SMTPFS_EVENT_MAXLEN])
++
+ 
+ #endif // SIMPLE_MTPFS_UTIL

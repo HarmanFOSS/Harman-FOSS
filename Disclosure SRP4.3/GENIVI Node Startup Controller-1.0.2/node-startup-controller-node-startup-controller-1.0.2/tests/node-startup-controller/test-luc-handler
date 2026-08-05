@@ -1,0 +1,124 @@
+#!/bin/bash
+
+
+#set -e
+#set -x
+
+
+# function to compare the LastUserContext
+# $1 is the context
+# $2 is the path to the file to compare the context to
+compare_luc()
+{
+  ./gvariant-writer "$1" "$2"
+  diff -q "$LUC_PATH" "$2"
+}
+
+
+# function to begin registration
+begin()
+{
+  gdbus call --system \
+    -d org.genivi.NodeStartupController1 \
+    -o /org/genivi/NodeStartupController1/NodeStartupController \
+    -m org.genivi.NodeStartupController1.NodeStartupController.BeginLUCRegistration \
+     &> /dev/null
+}
+
+
+# function to make a registration call
+register()
+{
+  gdbus call --system \
+    -d org.genivi.NodeStartupController1 \
+    -o /org/genivi/NodeStartupController1/NodeStartupController \
+    -m org.genivi.NodeStartupController1.NodeStartupController.RegisterWithLUC \
+    "$1" &> /dev/null
+}
+
+
+# function to begin registration
+end()
+{
+  gdbus call --system \
+    -d org.genivi.NodeStartupController1 \
+    -o /org/genivi/NodeStartupController1/NodeStartupController \
+    -m org.genivi.NodeStartupController1.NodeStartupController.FinishLUCRegistration \
+     &> /dev/null
+}
+
+
+# function to fail with a reason
+fail()
+{
+  echo "ERROR: $1"
+  exit 1
+}
+
+
+# clean up before running the test scripts
+rm -f temp
+rm -f "$LUC_PATH"
+
+
+# kill any existing instances of the Node Startup Controller
+skill -SIGKILL node-startup-controller 2>&1 >/dev/null
+
+# start the Node Startup Controller manually
+$NODE_STARTUP_CONTROLLER_CMD &
+
+# wait for ten seconds, hoping the Node Startup Controller will become available
+sleep 2
+
+# kill the Node Startup Controller when the test script exits
+trap "skill -SIGKILL node-startup-controller 2>&1 >/dev/null" EXIT
+
+
+# test a simple dictionary
+begin
+register "{0: ['app1.unit']}"
+end
+[ -z "$(compare_luc "{0: ['app1.unit']}" "temp")" ] \
+  || fail "Registration was not identical"
+
+
+# test whether RegisterWithLUC() writes by itself
+register "{1: ['app2.service']}"
+[ "$(compare_luc "{1: ['app2.service']}" "temp" )" ] \
+  || fail "Registration happened with only RegisterWithLUC() called"
+
+
+# test whether calling FinishLUCRegistration() by itself changes the file
+end
+[ -z "$(compare_luc "{0: ['app1.unit']}" "temp")" ] \
+  || fail "FinishLUCRegistration() without BeginLUCRegistration() changed the file"
+
+
+# test whether a complex dictionary works
+dict="{0: ['app1.unit'], 1: ['app1.unit', 'app3.unit'], 2: ['app2.unit']}"
+begin
+register "$dict"
+end
+[ -z "$(compare_luc "$dict" "temp")" ] \
+  || fail "Failed to register a complex dictionary type"
+
+
+# test with multiple RegisterWithLUC() calls
+dict="{0: ['app1.unit'], 1: ['app3.unit']}"
+begin
+register "{0: ['app1.unit']}"
+register "{1: ['app3.unit']}"
+end
+[ -z "$(compare_luc "$dict" "temp")" ] \
+  || fail "Failed to register correctly when multiple calls are used"
+
+
+# test that using multiply RegisterWithLUC() calls changes the order of the apps
+dict="{1: ['app2.unit', 'app1.unit']}"
+begin
+register "{1: ['app1.unit', 'app2.unit']}"
+register "{1: ['app1.unit']}"
+end
+[ -z "$(compare_luc "$dict" "temp")" ] \
+  || fail "Failed to change the order of the apps on multiple RegisterWithLUC() calls"
+
